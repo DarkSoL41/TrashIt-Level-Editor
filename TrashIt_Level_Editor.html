@@ -1,0 +1,2519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TRASH IT — Level Editor v0.5</title>
+<style>
+  :root{
+    --rust:#b5541c; --rust-hi:#e07a30; --steel:#20242b; --panel:#171a20;
+    --scrap:#c7bfae; --dim:#6d7480; --line:#31363f; --ok:#7ab648; --bad:#c0483f;
+    --bg:#101318; --canvas-a:#14171d; --canvas-b:#0f1217; --spr-cell-bg:#0c0e12;
+    --spr-tile-a:#20242b; --spr-tile-b:#171a20;
+    --mono:'Courier New',ui-monospace,monospace;
+  }
+  html[data-theme="light"]{
+    --rust:#a8481a; --rust-hi:#b2521c; --steel:#e7e0d3; --panel:#f4efe4;
+    --scrap:#241f18; --dim:#5a5346; --line:#c9bfa9; --ok:#3d7326; --bad:#8f2c24;
+    --bg:#efe9db; --canvas-a:#e2dbca; --canvas-b:#ece6d8; --spr-cell-bg:#e9e2d3;
+    --spr-tile-a:#ded5c1; --spr-tile-b:#e9e2d3;
+  }
+  html[data-theme="light"] body{font-weight:500}
+  html[data-theme="light"] .hint{color:var(--dim);font-weight:500}
+  html[data-theme="light"] select,html[data-theme="light"] button{font-weight:600}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--scrap);font-family:var(--mono);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  header{display:flex;align-items:baseline;gap:16px;padding:10px 16px;background:var(--panel);border-bottom:2px solid var(--rust)}
+  header h1{font-size:18px;letter-spacing:3px;color:var(--rust-hi);text-transform:uppercase}
+  header h1 b{color:var(--scrap)}
+  header .sub{font-size:11px;color:var(--dim)}
+  .toolbar{display:flex;gap:8px;align-items:center;padding:8px 16px;background:var(--steel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .toolbar label{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px}
+  select,button,input[type=number]{background:var(--panel);color:var(--scrap);border:1px solid var(--line);font-family:var(--mono);font-size:12px;padding:5px 10px;cursor:pointer}
+  input[type=number]{cursor:text;width:70px}
+  select:hover,button:hover{border-color:var(--rust-hi);color:var(--rust-hi)}
+  button.on{background:var(--rust);color:#fff;border-color:var(--rust-hi)}
+  button.primary{background:var(--rust);color:#fff;border-color:var(--rust-hi);font-weight:bold}
+  button.danger{border-color:var(--bad);color:var(--bad)}
+  button.danger:hover{background:var(--bad);color:#fff}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .zoombox{margin-left:auto;display:flex;gap:6px;align-items:center;font-size:12px;color:var(--dim)}
+  .tabs{display:flex;gap:2px;padding:0 16px;background:var(--steel);border-bottom:1px solid var(--line)}
+  .tabs button{border:none;border-bottom:2px solid transparent;background:transparent;border-radius:0;padding:8px 14px}
+  .tabs button.active{color:var(--rust-hi);border-bottom-color:var(--rust-hi)}
+  main{flex:1;display:flex;overflow:hidden;position:relative}
+  #viewport{flex:1;position:relative;overflow:hidden;background:
+    repeating-conic-gradient(var(--canvas-a) 0 25%, var(--canvas-b) 0 50%) 0 0/24px 24px;cursor:grab}
+  #viewport.drag{cursor:grabbing}
+  #viewport.place{cursor:crosshair}
+  canvas#map{position:absolute;image-rendering:pixelated;transform-origin:0 0}
+  #spritepane,#bgpane{flex:1;overflow:auto;padding:16px;display:none;background:var(--bg)}
+  #spritepane.show,#bgpane.show{display:block}
+  .spr-grid{display:flex;flex-wrap:wrap;gap:10px}
+  .spr-cell{background:var(--panel);border:1px solid var(--line);padding:6px;text-align:center;font-size:10px;color:var(--dim)}
+  .spr-cell canvas{image-rendering:pixelated;background:repeating-conic-gradient(var(--spr-tile-a) 0 25%, var(--spr-tile-b) 0 50%) 0 0/12px 12px;display:block;margin-bottom:4px}
+  .spr-src h3{font-size:11px;color:var(--rust-hi);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;border-bottom:1px solid var(--line);padding-bottom:4px}
+  aside{width:310px;background:var(--panel);border-left:1px solid var(--line);padding:12px;overflow-y:auto;font-size:13px;display:flex;flex-direction:column}
+  aside h2{font-size:12px;color:var(--rust-hi);text-transform:uppercase;letter-spacing:2px;margin:10px 0 6px;border-bottom:1px solid var(--line);padding-bottom:3px}
+  aside .kv{display:flex;justify-content:space-between;padding:3px 0;gap:6px;align-items:center}
+  aside .kv span:first-child{color:var(--dim);white-space:nowrap}
+  #brickcanvas{background:var(--spr-cell-bg);border:1px solid var(--line);image-rendering:pixelated;display:block;margin:6px 0}
+  .hint{color:var(--dim);font-size:12px;line-height:1.6;margin-top:8px}
+  footer{padding:7px 16px;background:var(--panel);border-top:1px solid var(--line);font-size:12px;color:var(--dim);display:flex;gap:20px;flex-wrap:wrap}
+  footer .stat b{color:var(--scrap)}
+  #drop{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:var(--bg);z-index:5;text-align:center;padding:40px}
+  #drop.hidden{display:none}
+  #drop .box{border:2px dashed var(--line);border-radius:6px;padding:40px 60px;transition:.15s}
+  #drop.over .box{border-color:var(--rust-hi);background:rgba(224,122,48,.06)}
+  #drop h2{color:var(--rust-hi);font-size:20px;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px}
+  #drop p{color:var(--dim);font-size:13px;max-width:520px;line-height:1.6;margin:6px 0}
+  #drop code{color:var(--rust-hi);background:var(--spr-cell-bg);padding:1px 6px;border:1px solid var(--line);font-weight:700}
+  .badge{display:inline-block;padding:1px 6px;border:1px solid var(--line);border-radius:3px;font-size:10px;margin-left:6px}
+  .badge.ok{color:var(--ok);border-color:var(--ok)}
+  .badge.bad{color:var(--bad);border-color:var(--bad)}
+  #err{color:var(--bad);font-size:11px;margin-top:8px;white-space:pre-wrap}
+  .palette{display:flex;flex-wrap:wrap;gap:6px;max-height:220px;overflow-y:auto;padding:6px;background:var(--spr-cell-bg);border:1px solid var(--line)}
+  .palette .pitem{border:2px solid transparent;background:repeating-conic-gradient(var(--spr-tile-a) 0 25%, var(--spr-tile-b) 0 50%) 0 0/8px 8px;cursor:pointer;padding:2px}
+  .palette .pitem.sel{border-color:var(--rust-hi)}
+  .palette .pitem canvas{image-rendering:pixelated;display:block}
+  .otype{display:block;width:100%;text-align:left;margin-bottom:3px;font-size:11px}
+  .otype.sel{background:var(--rust);color:#fff}
+
+  .toolgroup{display:flex;gap:4px;border:1px solid var(--line);padding:3px;border-radius:4px}
+  .mono-small{font-size:10px;color:var(--dim)}
+  .field-row{display:flex;gap:6px;align-items:center;margin:4px 0}
+  .field-row label{font-size:11px;color:var(--dim);min-width:60px}
+</style>
+</head>
+<body>
+<header>
+  <h1>TRASH<b>IT</b> // level editor <span style="font-size:11px;color:var(--dim);letter-spacing:0;text-transform:none">v0.5</span></h1>
+  <span class="sub" data-i18n="hdr.formats">formats reverse-engineered from G.EXE (DOS4GW LE) — editing + export to the game's binary files</span>
+  <span class="sub" data-i18n="hdr.credits">Editor and debugging by <b>DarkSoL</b> (Discord: darksol41), with AI assistance from Claude</span>
+  <div class="toolgroup" style="margin-left:auto">
+    <button id="langEn" class="on">EN</button>
+    <button id="langRu">RU</button>
+  </div>
+</header>
+<div class="toolbar">
+  <button id="btnOpen" class="primary" data-i18n="tb.open">📂 Open level files…</button>
+  <label data-i18n="tb.level">Level</label>
+  <select id="lvlsel"><option data-i18n="tb.noData">— no data —</option></select>
+
+  <div class="toolgroup">
+    <button id="modeView" class="on" data-i18n="tb.view">👁 View</button>
+    <button id="modeEdit" data-i18n="tb.edit">✏ Edit</button>
+  </div>
+
+  <div class="toolgroup" id="editTools" style="display:none">
+    <button id="toolSelect" data-i18n="tb.selectMove">Select/move</button>
+    <button id="toolDelete" class="danger" data-i18n="tb.delete">Delete (Del)</button>
+  </div>
+
+  <button id="btnGrid" data-i18n="tb.grid">Grid 48px</button>
+  <button id="btnObj" data-i18n="tb.objects">Objects (.OB)</button>
+  <button id="btnCol" data-i18n="tb.durability">Durability (.COL)</button>
+  <button id="btnFlip" data-i18n="tb.flip">Mirror flip=1 (experimental)</button>
+  <button id="btnTrans" class="on" data-i18n="tb.trans">0=transparent</button>
+  <div class="zoombox">
+    <button id="zoomOut">−</button>
+    <span id="zoomLbl">100%</span>
+    <button id="zoomIn">+</button>
+    <button id="zoomFit" data-i18n="tb.fit">Fit whole level</button>
+    <button id="zoom100" data-i18n="tb.zoom100">1:1 (crisp)</button>
+    <button id="btnTheme" data-i18n="tb.themeDark">☾ Dark</button>
+  </div>
+</div>
+<div class="tabs">
+  <button id="tabMap" class="active" data-i18n="tabs.map">Map</button>
+  <button id="tabSprites" data-i18n="tabs.sprites">Sprites (.SPR)</button>
+  <button id="tabBg" data-i18n="tabs.bg">Background (.SCN)</button>
+</div>
+<main>
+  <div id="viewport">
+    <canvas id="map"></canvas>
+    <div id="drop">
+      <div class="box">
+        <h2 data-i18n="drop.title">Open level files</h2>
+        <p data-i18n="drop.p1">Select the files of one level from the <code>LEVELS</code> and <code>SPR</code> folders (minimum needed:
+        <code>XX.G2</code>, <code>XX.G2R</code>, <code>XX.I</code>, <code>XX.WAM</code>,
+        <code>XX.PAL</code>; also recommended: <code>XX.COL</code>, <code>XX.OB</code>, <code>XX.SPR</code>) —
+        you can select all files of all levels at once, the editor will group them by name.</p>
+        <p data-i18n="drop.p2">Or drag & drop the files/folder here.</p>
+        <button id="btnOpen2" class="primary" data-i18n="drop.choose">📂 Choose files</button>
+        <div id="err"></div>
+      </div>
+    </div>
+  </div>
+  <div id="spritepane"></div>
+  <div id="bgpane"></div>
+  <aside id="sidebar">
+    <h2 data-i18n="side.map">Map</h2>
+    <div id="mapinfo"><div class="hint" data-i18n="side.noLevel">No level loaded.</div></div>
+
+    <div id="editorPanel" style="display:none">
+      <h2 data-i18n="side.bricks">Bricks (.G2 palette)</h2>
+      <div class="palette" id="brickPalette"></div>
+      <h2 data-i18n="side.objTypes">Objects (.OB types)</h2>
+      <div id="objPalette" style="max-height:160px;overflow-y:auto"></div>
+      <h2 data-i18n="side.selected">Selected</h2>
+      <div id="selInfo"><div class="hint" data-i18n="side.selectedHint">Click a brick/object on the map, or on the palette above to start placing new ones.</div></div>
+      <h2 data-i18n="side.themePalette">Theme palette</h2>
+
+      <h2 data-i18n="side.export">Export</h2>
+      <div class="hint" id="exportHint" data-i18n="side.noChanges">No changes yet — nothing to export.</div>
+      <div id="exportButtons" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
+    </div>
+
+    <div id="viewerPanel">
+      <h2 data-i18n="side.brickUnderCursor">Brick under cursor</h2>
+      <div id="brickinfo"><div class="hint" data-i18n="side.hoverHint">Hover the cursor over a brick on the map.</div></div>
+      <canvas id="brickcanvas" width="96" height="96"></canvas>
+      <h2 data-i18n="side.levelFiles">Level files</h2>
+      <div id="filesinfo" class="hint">—</div>
+    </div>
+  </aside>
+</main>
+<footer>
+  <div class="stat" data-i18n-prefix="footer.level"><span data-i18n="footer.level">level:</span> <b id="stName">—</b></div>
+  <div class="stat"><span data-i18n="footer.bricks">bricks:</span> <b id="stBricks">0</b></div>
+  <div class="stat"><span data-i18n="footer.blocks">blocks in .G2:</span> <b id="stBlocks">0</b></div>
+  <div class="stat"><span data-i18n="footer.objs">.OB objects:</span> <b id="stObjs">0</b></div>
+  <div class="stat"><span data-i18n="footer.cursor">cursor:</span> <b id="stCur">—</b></div>
+  <div class="stat" id="editHint" style="display:none;color:var(--rust-hi)"></div>
+</footer>
+<input type="file" id="fileInput" multiple style="display:none">
+<script>
+// ================= i18n bootstrap (must run FIRST — LANG is read by
+// helper functions like T()/typeLabel()/fieldLabel() that get called
+// during early page init such as initTheme(), before the rest of the
+// script below has a chance to run. Declaring/initializing LANG here,
+// at the very top, avoids a temporal-dead-zone ReferenceError that
+// would otherwise abort the entire script partway through startup —
+// which previously broke everything after it, including the file-open
+// and language-switch button bindings). =================
+const LANG_KEY='trashit_editor_lang_v1';
+let LANG = (function(){ try{ return localStorage.getItem(LANG_KEY)||'en'; }catch(e){ return 'en'; } })();
+
+function u16(a,o){return a[o]|a[o+1]<<8;}
+function s16(a,o){const v=u16(a,o);return v>=0x8000?v-0x10000:v;}
+function b64bytes(s){const bin=atob(s);const a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return a;}
+
+function parsePal(a){const p=[];for(let i=0;i<256;i++)p.push([Math.round(a[i*3]*255/63),Math.round(a[i*3+1]*255/63),Math.round(a[i*3+2]*255/63)]);return p;}
+
+function parseG2(a){
+  const blocks=[];let i=0;
+  while(i+2<=a.length){
+    const len=u16(a,i); if(len===0)break;
+    const data=a.subarray(i+2,i+2+len); i+=2+len;
+    const rows=[];let j=0;
+    while(j<data.length){const skip=data[j],rl=data[j+1];rows.push({skip,px:data.subarray(j+2,j+rl)});j+=rl;}
+    let w=0;for(const r of rows)w=Math.max(w,r.skip+r.px.length);
+    blocks.push({rows,w,h:rows.length});
+  }
+  return blocks;
+}
+
+// Serialize the in-memory block list back to the raw .G2 byte layout
+// (length-prefixed blocks, each row = [skip][rowlen incl. header][pixels]).
+function buildG2(blocks){
+  const chunks=[];
+  for(const b of blocks){
+    const rowBytes=[];
+    for(const r of b.rows){
+      rowBytes.push(r.skip & 0xFF, (r.px.length+2) & 0xFF);
+      for(const v of r.px) rowBytes.push(v & 0xFF);
+    }
+    const len=rowBytes.length;
+    const chunk=new Uint8Array(2+len);
+    chunk[0]=len & 0xFF; chunk[1]=(len>>8)&0xFF;
+    chunk.set(rowBytes,2);
+    chunks.push(chunk);
+  }
+  chunks.push(new Uint8Array([0,0])); // terminator
+  const total=chunks.reduce((s,c)=>s+c.length,0);
+  const out=new Uint8Array(total);
+  let o=0; for(const c of chunks){out.set(c,o); o+=c.length;}
+  return out;
+}
+
+// Remap a block's palette indices from a foreign palette to the closest
+// matching colors in the target palette, so tiles imported from another
+// level's .G2 render with correct-ish colors under this level's .PAL.
+function remapBlockPalette(block, srcPal, dstPal){
+  const cache=new Map();
+  function closest(v){
+    if(v===0)return 0; // keep transparency
+    if(cache.has(v))return cache.get(v);
+    const [r,g,b]=srcPal[v];
+    let best=1,bestD=Infinity;
+    for(let i=1;i<256;i++){
+      const [r2,g2,b2]=dstPal[i];
+      const d=(r-r2)**2+(g-g2)**2+(b-b2)**2;
+      if(d<bestD){bestD=d;best=i;}
+    }
+    cache.set(v,best);
+    return best;
+  }
+  const rows=block.rows.map(r=>({skip:r.skip, px:Uint8Array.from(r.px,closest)}));
+  return {rows, w:block.w, h:block.h};
+}
+
+// Inverse of parsePal: 0-255 RGB back to the file's 0-63-per-channel format.
+function buildPal(pal){
+  const buf=new Uint8Array(256*3);
+  for(let i=0;i<256;i++){
+    buf[i*3]=Math.round(pal[i][0]*63/255);
+    buf[i*3+1]=Math.round(pal[i][1]*63/255);
+    buf[i*3+2]=Math.round(pal[i][2]*63/255);
+  }
+  return buf;
+}
+// .SCN is just a raw indexed byte grid (fixed 256px width, no chunking) — the
+// parsed array IS a view straight into the loaded file bytes, so any in-place
+// recolor (see recolorLevelToPalette) is already reflected in scn.data as-is.
+function buildScn(scn){ return scn.data; }
+
+// Given all levels of one theme (each with its OWN .G2 blocks + .PAL, as
+// already collected in themeSources by buildThemeSources/mergeThemePackIntoSources),
+// find whose palette is the best "universal donor": the one that, if every
+// OTHER level's tiles were remapped into it, loses the least color accuracy
+// on average. This is what makes cross-level tile borrowing within a theme
+// safe — see HANDOFF for the concrete Junkyard case (0J has no near-white,
+// 5J does; a bathtub tile imported from 5J-like levels into 0J banded badly
+// under nearest-color remap no matter how good the remap code was).
+const richPaletteCache={};
+function computeRichPaletteForTheme(letter){
+  if(richPaletteCache[letter]) return richPaletteCache[letter];
+  const keys=Object.keys(themeSources).filter(k=>themeLetterOf(k)===letter);
+  if(keys.length===0) return null;
+  function err(rgb,pal){
+    let best=Infinity;
+    for(let i=1;i<256;i++){
+      const [r2,g2,b2]=pal[i];
+      const d=(rgb[0]-r2)**2+(rgb[1]-g2)**2+(rgb[2]-b2)**2;
+      if(d<best) best=d;
+    }
+    return best;
+  }
+  // Collect (rgb,count) per source level once, reused for every candidate.
+  const srcColors={};
+  for(const k of keys){
+    const counts=new Map();
+    for(const b of themeSources[k].blocks){
+      for(const r of b.rows){
+        for(const v of r.px){
+          if(v===0) continue;
+          counts.set(v,(counts.get(v)||0)+1);
+        }
+      }
+    }
+    srcColors[k]=[...counts.entries()].map(([idx,cnt])=>[themeSources[k].pal[idx],cnt]);
+  }
+  let bestKey=keys[0], bestScore=Infinity;
+  for(const cand of keys){
+    const candPal=themeSources[cand].pal;
+    let total=0, n=0;
+    for(const src of keys){
+      if(src===cand) continue;
+      for(const [rgb,cnt] of srcColors[src]){ total+=err(rgb,candPal)*cnt; n+=cnt; }
+    }
+    const score = n>0 ? total/n : 0;
+    if(score<bestScore){ bestScore=score; bestKey=cand; }
+  }
+  const result={key:bestKey, pal:themeSources[bestKey].pal, display:themeSources[bestKey].display};
+  richPaletteCache[letter]=result;
+  return result;
+}
+
+// Recolors the WHOLE level (every native + imported .G2 block, the .SCN
+// background, and every .SPR frame) onto a new palette, then swaps in that
+// palette as the level's own .PAL — so a tile imported from elsewhere in the
+// theme never needs its own lossy one-off remap again: everything in the
+// level already speaks the same "rich" palette. Mutates in place (blocks/scn/spr
+// arrays are views over the loaded file bytes, so buildG2/buildScn/buildSpr
+// downstream just see the new values already).
+function recolorLevelToPalette(p, newPal){
+  const lut=new Uint8Array(256);
+  lut[0]=0; // keep transparency/reserved-black slot 0 as-is
+  for(let v=1;v<256;v++){
+    const [r,g,b]=p.pal[v];
+    let best=1,bestD=Infinity;
+    for(let i=1;i<256;i++){
+      const [r2,g2,b2]=newPal[i];
+      const d=(r-r2)**2+(g-g2)**2+(b-b2)**2;
+      if(d<bestD){bestD=d;best=i;}
+    }
+    lut[v]=best;
+  }
+  for(const b of p.blocks) for(const r of b.rows) for(let i=0;i<r.px.length;i++) r.px[i]=lut[r.px[i]];
+  if(p.scn) for(let i=0;i<p.scn.data.length;i++) p.scn.data[i]=lut[p.scn.data[i]];
+  for(const f of p.spr) for(const r of f.rows) for(let i=0;i<r.px.length;i++) r.px[i]=lut[r.px[i]];
+  p.pal=newPal.map(c=>c.slice());
+  p.recolored=true;
+}
+
+// Called right before export/download is offered. If any tile was ever
+// lazily imported from another level of the theme (p.importMap non-empty)
+// and we haven't already recolored, switch this level onto the theme's
+// richest palette automatically — this is the ONLY place recoloring is
+// triggered, so normal editing of a level that never borrowed a foreign
+// tile is completely untouched (no surprise recolor, no quality loss).
+// NOTE (reverted): auto-recoloring the whole level to the theme's "richest"
+// palette was tried here and seemed byte-clean and correct in every offline
+// check (structure, round-trip, even rendering every single block from the
+// user's own exported files matched pixel-for-pixel) — but real in-game
+// testing showed it reliably corrupts rendering ("crooked"/streaky) for ANY
+// block whose pixel INDEX VALUES were rewritten by nearest-color remapping,
+// even a single imported tile with no other changes. A raw, unremapped copy
+// of a foreign tile's ORIGINAL native indices, by contrast, reliably works
+// in-game (wrong colors, but correct shape, every time). Since the failure
+// mode tracks "did we rewrite index values" rather than color distance,
+// size, block count, or type, this function is disabled for now — it may
+// come back as an opt-in, more conservative version (e.g. only remapping to
+// index values already used by this level's own native tiles) once that's
+// been verified in-game rather than just offline.
+function ensureExportPaletteConsistency(p, key){
+  return false;
+}
+
+function parseSpr(a){
+  if(a.length<8)return [];
+  const dv=new DataView(a.buffer,a.byteOffset,a.length);
+  const total=dv.getUint32(0,true), nfr=dv.getUint16(4,true);
+  const offs=[];for(let i=0;i<nfr;i++)offs.push(dv.getUint32(8+i*4,true));
+  const frames=[];
+  for(let idx=0;idx<nfr;idx++){
+    const base=8+offs[idx];
+    if(base+8>a.length)break;
+    const w=dv.getInt16(base,true),h=dv.getInt16(base+2,true),hx=dv.getInt16(base+4,true),hy=dv.getInt16(base+6,true);
+    const nextBase = idx+1<nfr ? 8+offs[idx+1] : total;
+    const datalen = Math.max(0, nextBase-base-8);
+    const data=a.subarray(base+8, base+8+datalen);
+    const rows=[]; let p=0; let ok=true;
+    for(let row=0; row<h; row++){
+      if(p+2>data.length){ok=false;break;}
+      const skip=data[p], rl=data[p+1]; p+=2;
+      const cnt=rl-2;
+      if(cnt<0||p+cnt>data.length){ok=false;break;}
+      rows.push({skip,px:data.subarray(p,p+cnt)}); p+=cnt;
+    }
+    let bw=0; for(const r of rows) bw=Math.max(bw, r.skip+r.px.length);
+    frames.push({w,h,hx,hy,rows,bw,ok});
+  }
+  return frames;
+}
+
+function parseScn(a){
+  const w=256;
+  const h=Math.floor(a.length/w);
+  return {w,h,data:a};
+}
+
+function parseWam(a){
+  const W=u16(a,0),H=u16(a,2),cnt=u16(a,4);
+  const ents=[];
+  for(let i=0;i<cnt;i++){const o=8+i*8;ents.push({type:u16(a,o),x:u16(a,o+2),y:u16(a,o+4)});}
+  return {W,H,cnt,ents};
+}
+
+function buildWam(wam){
+  const buf=new Uint8Array(8+wam.ents.length*8);
+  const dv=new DataView(buf.buffer);
+  dv.setUint16(0,wam.W,true); dv.setUint16(2,wam.H,true); dv.setUint16(4,wam.ents.length,true); dv.setUint16(6,0,true);
+  wam.ents.forEach((e,i)=>{
+    const o=8+i*8;
+    dv.setUint16(o,e.type,true); dv.setUint16(o+2,e.x&0xFFFF,true); dv.setUint16(o+4,e.y&0xFFFF,true); dv.setUint16(o+6,0,true);
+  });
+  return buf;
+}
+
+function parseI(a){
+  const out=[];for(let i=0;i+4<=a.length;i+=4)out.push({block:u16(a,i),flip:u16(a,i+2)});return out;
+}
+function buildI(I){
+  const buf=new Uint8Array(I.length*4);
+  const dv=new DataView(buf.buffer);
+  I.forEach((e,i)=>{dv.setUint16(i*4,e.block,true);dv.setUint16(i*4+2,e.flip,true);});
+  return buf;
+}
+
+function parseCol(a){
+  const out=[];for(let i=0;i+6<=a.length;i+=6)out.push([s16(a,i),s16(a,i+2),s16(a,i+4)]);return out;
+}
+function buildCol(col){
+  const buf=new Uint8Array(col.length*6);
+  const dv=new DataView(buf.buffer);
+  col.forEach((r,i)=>{dv.setInt16(i*6,r[0],true);dv.setInt16(i*6+2,r[1],true);dv.setInt16(i*6+4,r[2],true);});
+  return buf;
+}
+const COL_MATERIALS=[0,1,2,4,5];
+const COL_DURABILITY=[0,1,2,3,4,5,6,7,8,9];
+
+// ===================================================================
+// .OB object parser — FIXED-LENGTH MODEL (rewritten).
+//
+// Every object type has a FIXED number of int16 words (type, X, Y, then
+// type-specific fields). This was verified empirically against all 147
+// standard levels: with the table below, every file segments by a plain
+// left-to-right walk — no backtracking, no "wrapper" records, no length
+// candidates, no ambiguity. Independent sanity checks that all pass under
+// this model: exactly ONE spawn (type 9) in every one of the 147 files;
+// exactly ONE settings record (type 16) in 146/147; exactly one exit
+// (type 13) in every level that has an exit. The old "variable-length /
+// wrapper" theory for types 0 and 3 was an artifact of three wrong table
+// entries (0 and 3 were not actually variable, and 34 was mis-measured
+// from its single occurrence). Corrected values:
+//   type 0  = 11   (was treated as variable 7/9/11/16/18…)
+//   type 3  = 7    (was treated as variable)
+//   type 34 = 9    (was guessed 7 from one sample in 8S; real value 9)
+// Plus: an earlier hypothesis claimed the value 0x7FFF (32767) marks
+// end-of-records as a special 2-word trailer, seen only on 9L. This was
+// WRONG — it was an artifact of a wrong length for type 24 (was 7, is
+// really 11). With the correct length, 9L's object list ends exactly on
+// the last word of a normal type-13 exit record (164,690) whose own last
+// tail field just happens to hold the value 32767 — not a sentinel at
+// all. isObSentinel()/tail handling below are kept as a defensive
+// safety net for genuinely unknown/broken files, not because 32767 is
+// known to have special meaning in real level data.
+//
+// Lengths are in int16 words and INCLUDE the leading type word and X,Y.
+const OB_LEN = {
+  0:11, 1:7,  2:7,  3:7,  4:7,  5:7,  6:11, 7:9,  8:19, 9:7,
+  10:7, 11:7, 12:7, 13:12,14:12,15:9, 16:37,17:12,18:7, 22:7,
+  23:7, 24:11,27:11,28:11,29:11,30:11,31:24,32:11,33:12,34:9,
+  35:7, 36:7, 37:7, 38:7, 39:7, 40:7, 41:7, 42:7, 43:7, 44:9,
+  45:9, 46:9
+};
+// Every known type now has one concrete length, so every type is placeable.
+const OB_PLACE_LEN = OB_LEN;
+// End-of-records sentinel: a leading word of 0x7FFF (or its signed twin)
+// is not a real record; everything from there on is preserved verbatim.
+function isObSentinel(v){ return v===32767 || v===-32768; }
+// Smallest possible record. If fewer than this many words remain, what's
+// left cannot be a full record — it's trailing padding/sentinel bytes and
+// is preserved verbatim (e.g. a genuinely truncated/edited file).
+const OB_MIN_LEN = Math.min.apply(null, Object.values(OB_LEN));
+// Informational only now (NOT a parse-error signal): an object sitting at
+// the map origin. Under the fixed-length model the split is unique, so a
+// near-origin object is simply a real object on a small map (the compact
+// coop/bonus arenas), not a mis-split.
+function isCornerArtifact(raw){ return Math.abs(raw[1])<20 && Math.abs(raw[2])<20; }
+
+function parseOb(a){
+  const empty={cnt:0,objs:[],broken:false,tail:null,originalCnt:0,originalParsedCount:0,rawPassthrough:null,ambiguous:false,cntMode:null};
+  if(a.length<2) return empty;
+  const dv=new DataView(a.buffer,a.byteOffset,a.length);
+  const words=[]; for(let i=0;i+2<=a.length;i+=2) words.push(dv.getInt16(i,true));
+  const n=words.length;
+  const cnt=words[0]&0xFFFF;
+  const objs=[];
+  let i=1, broken=false;
+  while(n-i>=OB_MIN_LEN){
+    const t=words[i];
+    if(isObSentinel(t)) break;                 // trailing sentinel -> rest is tail
+    const L=OB_LEN[t];
+    if(L==null){ broken=true; break; }         // unknown type
+    if(i+L>n){ broken=true; break; }           // would overrun the file
+    const rec=words.slice(i,i+L);
+    const x=rec[1], y=rec[2];
+    objs.push({
+      type:t, x, y, raw:rec,
+      isFirst:objs.length===0, isSpawn:t===9,
+      cornerSuspicious:isCornerArtifact(rec)
+    });
+    i+=L;
+  }
+  if(broken){
+    // A genuinely unknown type or a bad boundary: never guess. Pass the raw
+    // bytes through untouched so the level still round-trips byte-exact; we
+    // just can't show/edit its objects. (Does not occur on the 147 standard
+    // levels; this is a safety net for edited or non-standard files.)
+    return {cnt,objs:[],broken:true,tail:null,originalCnt:cnt,originalParsedCount:0,rawPassthrough:a,ambiguous:false,cntMode:null,countMismatch:true};
+  }
+  // Bytes from the current word position to end (sentinel + anything after)
+  // are preserved verbatim so export is byte-exact.
+  const tail = (i<n) ? a.slice(i*2) : null;
+  return {cnt,objs,broken:false,tail,originalCnt:cnt,originalParsedCount:objs.length,rawPassthrough:null,ambiguous:false,cntMode:null};
+}
+
+function buildOb(ob){
+  if(ob.rawPassthrough) return ob.rawPassthrough; // structure not trusted — pass through unchanged
+  // The .OB count field is rebuilt from the original value plus however many
+  // objects were added/removed in the part we parsed. On an unedited file the
+  // delta is 0, so the exact original count is written back (byte-exact).
+  const base = ob.originalCnt!=null ? ob.originalCnt : ob.objs.length;
+  const parsed = ob.originalParsedCount!=null ? ob.originalParsedCount : ob.objs.length;
+  const finalCnt = base + (ob.objs.length - parsed);
+  const words=[finalCnt];
+  for(const o of ob.objs){
+    let rec=o.raw.slice();
+    const expectedLen=OB_PLACE_LEN[o.type];
+    // Last line of defense: if a record's length ever doesn't match its
+    // type's known fixed length (stale default table, manual edit gone
+    // wrong, future bug — doesn't matter which), fix it here rather than
+    // write a corrupt file. A wrong length silently shifts every object
+    // AFTER this one in the file, which is a much worse and harder-to-spot
+    // failure than one object having a few extra/missing zero fields.
+    if(expectedLen!=null && rec.length!==expectedLen){
+      console.warn('buildOb: record for type',o.type,'has',rec.length,'words, expected',expectedLen,'— fixing before export.');
+      rec = rec.slice(0,expectedLen);
+      while(rec.length<expectedLen) rec.push(0);
+    }
+    rec[0]=o.type; rec[1]=o.x; rec[2]=o.y;   // type,X,Y are always the first 3 words
+    for(const v of rec) words.push(v);
+  }
+  const tailLen = ob.tail ? ob.tail.length : 0;
+  const buf=new Uint8Array(words.length*2 + tailLen);
+  const dv=new DataView(buf.buffer);
+  words.forEach((w,idx)=>dv.setInt16(idx*2, w, true));
+  if(ob.tail) buf.set(ob.tail, words.length*2);
+  return buf;
+}
+
+// ---------- file handling ----------
+const REQUIRED = ['G2','G2R','I','WAM','PAL'];
+const OPTIONAL = ['COL','OB','OBT','SDE','SPR','SCN'];
+let levelFiles = {};
+let levelDisplay = {};
+
+function extOf(name){const m=name.match(/\.([A-Za-z0-9]+)$/);return m?m[1].toUpperCase():'';}
+function baseOf(name){const parts=name.split(/[\\/]/);const fn=parts[parts.length-1];return fn.replace(/\.[A-Za-z0-9]+$/,'');}
+
+async function ingestFiles(fileList){
+  const err=document.getElementById('err');
+  err.textContent='';
+  let added=0;
+  for(const f of fileList){
+    const ext=extOf(f.name);
+    if(!REQUIRED.includes(ext)&&!OPTIONAL.includes(ext))continue;
+    const base=baseOf(f.name);
+    const key=base.toLowerCase();
+    if(!levelFiles[key]){levelFiles[key]={};levelDisplay[key]=base;}
+    levelFiles[key][ext]=f;
+    delete levelCache[key]; // files changed for this level — force a fresh reparse, don't show stale cached edits
+    delete themeSources[key]; // and refresh its theme-palette entry too
+    added++;
+  }
+  if(added===0){
+    err.textContent=T('No matching files found among the selection.','Не найдено ни одного подходящего файла среди выбранного.');
+    return;
+  }
+  rebuildLevelSelect();
+}
+
+const themeSources={}; // levelKey -> {blocks, g2r, pal, blockDefaultType, blockDefaultCol} for ALL loaded levels (not just the active one)
+const loadedThemePacks=new Set(); // theme letters whose pack <script> has already been injected (successfully or not)
+
+// A level's theme is the run of letters after its leading digits: "3j" -> "J".
+function themeLetterOf(key){
+  const m=/^\d+([a-z]+)$/i.exec(key);
+  return m ? m[1].toUpperCase() : null;
+}
+
+// Loads trashit_theme_<LETTER>.js (if present next to this HTML file) which
+// defines window.TRASHIT_THEME_PACKS[letter] = {levelKey: {G2,PAL,WAM,I,COL,G2R (base64)}, ...}
+// for every level of that theme — lets the brick palette auto-fill with the
+// whole theme's tileset from just opening ONE level of it, no manual
+// multi-file selection needed. Silently does nothing if the pack file isn't
+// there (e.g. user only downloaded the editor, not the tile packs).
+function ensureThemePackLoaded(letter){
+  return new Promise(resolve=>{
+    if(!letter || loadedThemePacks.has(letter) || (window.TRASHIT_THEME_PACKS&&window.TRASHIT_THEME_PACKS[letter])){
+      resolve(); return;
+    }
+    loadedThemePacks.add(letter);
+    const s=document.createElement('script');
+    s.src='trashit_theme_'+letter+'.js';
+    s.onload=()=>resolve();
+    s.onerror=()=>resolve(); // pack just isn't available — that's fine, not an error the user needs to see
+    document.head.appendChild(s);
+  });
+}
+
+function mergeThemePackIntoSources(letter){
+  const pack=window.TRASHIT_THEME_PACKS&&window.TRASHIT_THEME_PACKS[letter];
+  if(!pack)return 0;
+  let added=0;
+  for(const lvKey of Object.keys(pack)){
+    const key=lvKey.toLowerCase();
+    if(themeSources[key])continue; // already have it (either from manual open or already merged)
+    const entry=pack[lvKey];
+    if(!entry.G2||!entry.PAL)continue;
+    try{
+      const pal=parsePal(b64bytes(entry.PAL));
+      const blocks=parseG2(b64bytes(entry.G2));
+      const g2r=entry.G2R?Array.from(b64bytes(entry.G2R)):[];
+      let blockDefaultType=new Map(), blockDefaultCol=new Map();
+      if(entry.WAM&&entry.I){
+        const wam=parseWam(b64bytes(entry.WAM));
+        const I=parseI(b64bytes(entry.I));
+        const col=entry.COL?parseCol(b64bytes(entry.COL)):[];
+        ({blockDefaultType,blockDefaultCol}=computeBlockDefaults(wam,I,col));
+      }
+      themeSources[key]={blocks,g2r,pal,blockDefaultType,blockDefaultCol,display:lvKey,fromPack:true};
+      added++;
+    }catch(e){ console.error('theme pack entry failed',lvKey,e); }
+  }
+  return added;
+}
+
+async function autoLoadThemeForLevel(key){
+  const letter=themeLetterOf(key);
+  if(!letter)return;
+  // manually-opened files of this same theme (if the user dropped several
+  // levels at once) are parsed first — cheap, since only this one theme's
+  // levels are touched, never the whole loaded set.
+  await buildThemeSources(letter);
+  await ensureThemePackLoaded(letter);
+  const added=mergeThemePackIntoSources(letter);
+  buildBrickPalette();
+  if(added>0){
+    const hint=document.getElementById('editHint');
+    hint.style.display='block';
+    hint.textContent=T(`Theme "${letter}": auto-loaded ${added} levels from trashit_theme_${letter}.js — their bricks are already in the palette above (content duplicates are hidden).`,`Тема "${letter}": автозагружено ${added} уровней из trashit_theme_${letter}.js — их кирпичи уже в палитре выше (дубликаты по содержимому скрыты).`);
+  }
+}
+
+// Only ever parses levels belonging to ONE theme (the currently active
+// level's). Loading the whole game's LEVELS folder at once would otherwise
+// mean parsing 100+ levels' tile sets up front — slow, memory-heavy, and
+// pointless since tiles from other themes don't visually match anyway and
+// should never be placeable together.
+async function buildThemeSources(themeLetter){
+  for(const key of Object.keys(levelFiles)){
+    if(themeLetterOf(key)!==themeLetter)continue;
+    if(themeSources[key])continue; // already parsed
+    const have=levelFiles[key];
+    if(!have.G2||!have.PAL)continue; // need at least tile art + colors to show anything
+    try{
+      const pal=parsePal(await fileBytes(have.PAL));
+      const blocks=parseG2(await fileBytes(have.G2));
+      const g2r=have.G2R?Array.from(await fileBytes(have.G2R)):[];
+      let blockDefaultType=new Map(), blockDefaultCol=new Map();
+      if(have.WAM&&have.I){
+        const wam=parseWam(await fileBytes(have.WAM));
+        const I=parseI(await fileBytes(have.I));
+        const col=have.COL?parseCol(await fileBytes(have.COL)):[];
+        ({blockDefaultType,blockDefaultCol}=computeBlockDefaults(wam,I,col));
+      }
+      themeSources[key]={blocks,g2r,pal,blockDefaultType,blockDefaultCol,display:levelDisplay[key]};
+    }catch(e){ console.error('theme source parse failed for',key,e); }
+  }
+  // drop sources for levels whose files were removed/replaced, or that no
+  // longer belong to the theme currently being shown
+  for(const key of Object.keys(themeSources)){
+    if(!levelFiles[key] || themeLetterOf(key)!==themeLetter) delete themeSources[key];
+  }
+}
+
+function rebuildLevelSelect(){
+  const sel=document.getElementById('lvlsel');
+  sel.innerHTML='';
+  const keys=Object.keys(levelFiles).sort();
+  let anyComplete=false;
+  for(const k of keys){
+    const have=levelFiles[k];
+    const complete=REQUIRED.every(e=>have[e]);
+    const o=document.createElement('option');
+    o.value=k;
+    o.textContent=levelDisplay[k]+(complete?'':T('  [incomplete]','  [неполный]'));
+    o.disabled=!complete;
+    sel.appendChild(o);
+    if(complete)anyComplete=true;
+  }
+  updateFilesInfo();
+  if(anyComplete){
+    const firstOk=[...sel.options].find(o=>!o.disabled);
+    sel.value=firstOk.value;
+    document.getElementById('drop').classList.add('hidden');
+    loadSelectedLevel();
+  }
+}
+
+function updateFilesInfo(){
+  const box=document.getElementById('filesinfo');
+  const k=document.getElementById('lvlsel').value;
+  if(!k||!levelFiles[k]){box.textContent='—';return;}
+  const have=levelFiles[k];
+  const all=[...REQUIRED,...OPTIONAL];
+  box.innerHTML=all.map(e=>{
+    const ok=!!have[e];
+    return `${e}<span class="badge ${ok?'ok':'bad'}">${ok?'✓':T('no','нет')}</span>`;
+  }).join('&nbsp; ');
+}
+
+async function fileBytes(f){ return new Uint8Array(await f.arrayBuffer()); }
+
+// ---------- state ----------
+const state={
+  key:null, zoom:1, px:0, py:0,
+  grid:false, obj:false, col:false, flip:false, trans:true,
+  tab:'map', mode:'view', tool:'select',
+  brushBlock:null, brushObjType:null,
+  parsed:null, sel:null, // sel: {kind:'brick'|'object', idx}
+  drag:null, panDrag:null,
+  dirty:{WAM:false,I:false,OB:false,COL:false,G2:false,G2R:false,PAL:false,SCN:false,SPR:false},
+};
+function markDirty(...keys){ for(const k of keys) state.dirty[k]=true; updateExportUI(); }
+
+// WAM's "type" field turns out to be an almost-fixed property of the G2
+// block it references (verified: 0 mismatches on 3 of our 4 sample
+// levels, 2 rare exceptions on the 4th) — NOT a free/arbitrary value.
+// Placing a brick with the wrong type is what caused the "level won't
+// load" crash. Likewise a block's usual .COL material/durability is a
+// useful default (editable, never enforced). Build both lookups from a
+// level's own existing placements.
+function computeBlockDefaults(wam, I, col){
+  const typeMap=new Map(), colMap=new Map();
+  wam.ents.forEach((e,i)=>{
+    const ie=I[i]; if(!ie)return;
+    if(!typeMap.has(ie.block)) typeMap.set(ie.block, new Map());
+    const tm=typeMap.get(ie.block);
+    tm.set(e.type,(tm.get(e.type)||0)+1);
+    const cr=col&&col[i+1];
+    if(cr){
+      if(!colMap.has(ie.block)) colMap.set(ie.block, new Map());
+      const cm=colMap.get(ie.block);
+      const key=cr[0]+','+cr[1];
+      cm.set(key,(cm.get(key)||0)+1);
+    }
+  });
+  const blockDefaultType=new Map();
+  for(const [bi,counts] of typeMap){
+    let best=null,bestN=-1;
+    for(const [t,n] of counts) if(n>bestN){best=t;bestN=n;}
+    blockDefaultType.set(bi,best);
+  }
+  const blockDefaultCol=new Map();
+  for(const [bi,counts] of colMap){
+    let best=null,bestN=-1;
+    for(const [k,n] of counts) if(n>bestN){best=k;bestN=n;}
+    blockDefaultCol.set(bi, best.split(',').map(Number));
+  }
+  return {blockDefaultType, blockDefaultCol};
+}
+
+async function parseLevel(key){
+  const have=levelFiles[key];
+  const pal=parsePal(await fileBytes(have.PAL));
+  const blocks=parseG2(await fileBytes(have.G2));
+  const wam=parseWam(await fileBytes(have.WAM));
+  const I=parseI(await fileBytes(have.I));
+  const col=have.COL?parseCol(await fileBytes(have.COL)):[];
+  const ob=have.OB?parseOb(await fileBytes(have.OB)):{cnt:0,objs:[],broken:false};
+  const g2r=have.G2R?Array.from(await fileBytes(have.G2R)):[];
+  const sprRaw=have.SPR?await fileBytes(have.SPR):null;
+  const spr=sprRaw?parseSpr(sprRaw):[];
+  const scn=have.SCN?parseScn(await fileBytes(have.SCN)):null;
+  const {blockDefaultType, blockDefaultCol}=computeBlockDefaults(wam,I,col);
+  let maxNativeW=0, maxNativeH=0;
+  for(const b of blocks){ maxNativeW=Math.max(maxNativeW,b.w); maxNativeH=Math.max(maxNativeH,b.h); }
+  return {
+    pal,blocks,wam,I,col,ob,g2r,spr,scn,sprRaw,blockDefaultType,blockDefaultCol,
+    originalBlockCount:blocks.length, // blocks 0..this-1 came from this level's own .G2 and are always kept on export
+    importMap:new Map(), // 'srcKey#srcIdx' -> local block index, for lazily-imported theme tiles
+    maxNativeW, maxNativeH, // kept for the palette-recolor step's own bookkeeping (see recolorLevelToPalette) —
+    // NOT a size limit: an earlier hypothesis blamed a level-specific draw-buffer size cap for corrupted
+    // rendering of imported tiles, but a controlled in-game test (RAW indices from the source level rendered
+    // with correct SHAPE, just wrong colors) disproved this. The real cause is palette mismatch: a level's
+    // own .PAL simply may not contain the colors a foreign tile needs (e.g. no near-white in a Junkyard
+    // level's palette for a white bathtub), so nearest-color remapping of a single imported tile can look
+    // badly banded/broken. Fix implemented below: recolor the WHOLE level to the theme's richest palette.
+    recolored:false, // set true once recolorLevelToPalette has run for this parsed level
+  };
+}
+
+const mapCanvas=document.getElementById('map');
+const vp=document.getElementById('viewport');
+const MARGIN=320;
+
+function drawBrick(ctx,block,pal,x,y,flip,transparent){
+  const img=ctx.createImageData(block.w,block.h);
+  const d=img.data;
+  for(let ry=0;ry<block.rows.length;ry++){
+    const r=block.rows[ry];
+    const cnt=r.px.length;
+    // The stored "skip" byte is NOT the row's left position — every row is
+    // actually meant to be centered by its pixel run length within the
+    // block's overall width. Verified against real in-game screenshots:
+    // using skip as a literal left-offset produces a systematic lopsided
+    // "wedge" shear on any non-rectangular shape (pumpkins, tents, bottles
+    // all came out skewed the same way); centering by cnt reproduces them
+    // correctly, symmetric shapes and all. flip only needs to reverse the
+    // pixel order within the run — centering keeps the position itself
+    // symmetric either way.
+    const xstart=Math.floor((block.w-cnt)/2);
+    for(let rx=0;rx<cnt;rx++){
+      const v=flip?r.px[cnt-1-rx]:r.px[rx];
+      if(transparent && !v)continue;
+      const cx=xstart+rx;
+      const o=(ry*block.w+cx)*4;const c=pal[v];
+      d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];d[o+3]=255;
+    }
+  }
+  const t=document.createElement('canvas');t.width=block.w;t.height=block.h;
+  t.getContext('2d').putImageData(img,0,0);
+  ctx.drawImage(t,x,y);
+}
+
+let hitmap=[]; let objhit=[];
+
+function T(en, ru){ return (typeof LANG!=='undefined' && LANG==='ru') ? ru : en; }
+function renderLevel(){
+  try{
+    renderLevelInner();
+  }catch(e){
+    console.error(e);
+    document.getElementById('err').textContent=T('Render error: ','Ошибка отрисовки: ')+e.message+T(' (F12 — details in console)',' (F12 — подробности в консоли)');
+  }
+}
+// Small procedural icons for object types whose real appearance is now
+// confirmed (see OB_NOTES) — these are NOT extracted from the game's real
+// .SPR sprites (we have no confirmed OB-type -> .SPR-frame mapping), just
+// simple, recognizable canvas glyphs so you can tell objects apart on the
+// map at a glance instead of every non-spawn object being an identical
+// square. Falls back to the plain square (drawn by the caller) for any
+// type not listed here. `raw` is the object's full raw word array, used to
+// reflect variant fields (e.g. wood/metal swing) in the icon itself.
+const OBJECT_SPRITE_B64={
+  "t0_metal":"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",
+  "t0_wood":"iVBORw0KGgoAAAANSUhEUgAAAEQAAAAjCAYAAAAt4qxQAAAEYUlEQVR4nN2aLZerOBjHf7MHERERgUAgEAhEBaJixcoRFSP2Q65cccX9AFesGDECMaKiAoGIQERERHAOK2hSoPS+TFt6z/zPqSCBvPzz5HntE49BL3JJGW9QSmGMwRgTOhvZYt/ap0cs7BGT9nIbs4lysixDKQVwRgpAXdfs9/tV17jmZL3cxmzlhiRJAhFjGGOo6xoAIQQAzjleX19XW2e01kQAnXEguUiG1nqQEqtDu7aglOqNMauQ8scak3hkLiIW70hdkTsX2j0ZWusJGaP+zykhtejItYIMlNJsj+1710InkMJxsOffiVz27mA/n4Sc0M2eI6xtOLTm7E0Xd6xFBjyAEC3bxXYpU/JYrbuYBaxJyJM7WGwdUbsaY5JJZxq7C5+ti9UlpBYdTku0eQ9tRabWXsZFPEiHTLGvzcW+zK2q9x9DyFyP/E4Ssi79DCeeyWgy9b5u2dfLynbfrOeDwIN0yICp6S2yePF9kcv+zkuaYE0J6YuiQClFZCMQY6sSce6bPAarXplGtigUpClWKd4cSF2tuYQfYnUdAoQwXymFTcrQJqUAJybxTOYi6k/ouvcil6Q2RggxyYGMoaNoMbhb0/SuwXrIjmVZFhp9pkzrgQCfI/E5kXkaAI5O3Z0l5d7U9yKXbBLIZlMZY1BKhYSQJ2KSK5FT956uue9qua+E9CKXZC6izDak8cncNu2QDavaFqUUWZaFFGJZlhhjqKrq4sB119xNUu5FSF+kijxWR//CS0fHvm4Xw3xkQlmWABOpWYTVaHufxNGtB+xFLnmW8Zmj5T3RMRnzTYlc9n9vXyZXaayAlbXUXRf0yz1IueVgQV8kdkrIEhlw2S33xACTMkXIzI+VrUzA6pu5+LcY5GZEjFEURT+3Sh4hO281yGQiRdeWLa6xMjM9AcTXkeBRFEXvlav/JUlCkgxWxxP17dBQHpWy1trroP4aUj7y4Xf1xJyIj/gOchv3L/kzMJMGoPxrB7Do3HlTDlBV1Yek5Vc+CA5W7PTdyPBYIkVrTSL9CyerNCanqiqUUpPfP2///nRp9GeuzOBPROlIbDNwB+DyFbnWq+zMEA2PdUcgA8DqsHl/hZRSlGXJl7ev0MKf6VDoeMmfIaf/8vb1h2s66xS57OduNnBRy1+7cbmN+9TGkxMFvlu4AiizDaQpQDDT9fsrSV6exUvehMMQcXt0xp2tffIwNndLBGj78TqJ3Mb9JsrDpj3hIW4ZwTmHc47YLZMhZRrImKA5ufZGnsRpfLjjovq3w3/fJ4RjEgdu7x7vdrt+qabrkbp68nwpz7qvDe9OMR/Lb/L5aIkOx2K5b9da49y01FG17z8k5FfR73a7xeI1AE1zrLcsqaqOU6YsohFZ6Jn7HGPnTFk7pAmO8Jv0G7/2IG8lAb3IBxGN1HAyqR2skN8MViOzjsROrZOU6ahINSVmCf6ksyii7oaA0RhzM4le+w8zwWLBSRKEEOH/IHAK7upjuL9mbfd/MqyxhUp9waoAAAAASUVORK5CYII=",
+  "t1":"iVBORw0KGgoAAAANSUhEUgAAACkAAAAcCAYAAAD815boAAAEuElEQVR4nMVYLXPkOBB9uQoQbGDQYICAgaBBgMECQ4OAgQYLAg4YHFg4P2FgwIFAg4DAAQMMDgw4YDhggcAAgQCBAYICV+UDthTP52Zvtuq6KjW2JEvP/bpft3OHX2O9Ugrf6iewVAAAazSeXxpore9u3fy3m+EBfVEUWC6XAIC2bWGNxu/zCqvVCnme97/gjJusJ6K+aZq+ruueiCKgoij6f4zpm6b5/0Hmed7/vdn0RVGcgGmaptdaH4D/L3Z/y8PBEmYwM6qq6suyRNd1eHt7g3MOWuub978ZpNYaXdehqio8ZhmAIS6zLMNDluF1AHtT8tyaOHfOOby8vCAhAmYzvG42AID5fI5122Iz3t90yCfX9UQEZo4DRBSvF4sFlFJ4fn6G1hreezjnPrXxZyTq2oK+qir8UdfIpTy7YOf9ydje2tN1xsTYnIIP19ZaWGsvAr4akxHgbPYx+P4e79PJdZhLv3z5WAcAsxkSZnRdB+cciAhaayilYK2Nv8x8MckugezzPAcA/LlagYhARHDOwTkHOXrWGIOHLEMyHuCcQ3guHPg42dSOXvbex7DYbrfX/ATgSuI8VXMkzHjIsgOAAVxChLIsI6Awp7XG3lokRFBqKJGpEAfPBqDHdklPL4IUNHhn7xyUUsjzHA9ZBoHBCztjBjDMUEpFGo0x2I+AUiGmAC4dNZwnBLJRwj4Dss/zHKmUMMZEb2itkTCjKOfRq9OEeswyKKWwWq3gnMPeuShHmM2QKXmgDsfmvT/r3UsgURRFpBoYxHmxWGBvbfROmKvrGnVdY+d9jEfvhoT4WhQH+9ozmT81IQSUUieUnwWplELXddg7h7ZtobXGt/oJuZRYj4EerkNmAgO9zIytHkIhStT7OwRd9uLUzoXFMchIdTApJb5WFYpyjvV2i+VyebKRnKy31oKI4gtODw+hc8ku0X0iQcVIUQCaMCMVAq+bDZqmgZTyAGSoRKkQ6IyBtRaSacjusow6mkwE/ZpJKeGc66fCfkK3Ugr7MfCTSaB/LQr81TQoyxKbzQadMXjMMtR1HaVo3bZg5khtKkQU9eleYpL14VoIASFEZGJqU09GqnfGIJUy6l87VgoigndD8H/fdhF8ZwyasZmoqgqplEiYsd5uoZRCOgJWSkURPwf00v0B3SGrgznn4J3F29sKACLVISTWbYvXUY6ICFVVQY4AASAh+tDK2SwK+jGIYxtLZaT8/ngyCHSwvSNIKaO8hGwWRGCIWCYlE/wIDKPnYgKOlBPRD2UoOGdKeYjJA6r31g5/45sX+VAaBTyYGVJKeGdRliWICE9Pw1eigMduLHvA0CVNO6VMyasZzmOHDxx6OybOcVYHS4hg7AA2lEoAUQvDJ8J0XTCt9UFGe4iD+wBqCi6YUioK+/10MGE+6Qd3xoCZYzwppWK5/L7tkCmJrhuSSDJFmnbe/1AXjy00MtPfCDJQ3XVd9GSgLSwMsXfccRMRPEzM/uRMxdh5j1SIqKnnAAEf7Z0xJjB0Bxx15kTUh06EmePBkoeDPUQcC8CPX2p6H6Ro2mumQmC93cZyy8yw1sZqM649wPWzX3F9oJCIIMZaPX0ZDxHng2cD0PBfjnNArtm/QW+uY4GDrHsAAAAASUVORK5CYII=",
+  "t13":"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",
+  "t14":"iVBORw0KGgoAAAANSUhEUgAAABcAAAAUCAYAAABmvqYOAAACXklEQVR4nI2UkX8jQRTHv7lPYGBgYGEgsLCwEAgEFhYCgUKgUAgcHBwEisXDg8LBQeGgf0DgsFAoBAKBhUIhsLAQWFgYGBjYz2cOct122+6mD+fN7/d+782b34DT4aepZB7MqSnZlmCMoagPuNwO+oB9SS8iySQYE4YhAGEYEscxzpQAFKXh5uEWm1Uf8nzpqxw4hVIKYwxleSR0psQhcAi01kzluBM/7COvhKEoitaZQ/RBPk8OYK1FSgnAZrNhMpmglAKOs98dsk5s74P8Dy8iSeiGLKYxZWXJigP7gzmJ7Z35swCXWwC0itGB/ATkGH1j8SKSpEKxnI8xRqNUSWlgpCRKCP+I7V3HLuX+azrmZpGileJPtuU+e2iS1tUApEJxdT7101T6zyj3IpJc6BCA77/vG1VJ9EJgnGtmvnXGz2VAEkm/y8tWF++UX1/+5MftX/L6/Wx1GBCHqnXmcju4eywGs4tvrC6vWh20yEUkUUqx3+/5dX3NarVqLksxbAq8jtls5pfLpQeIo1Er1yJ3uWW9XlMUBYHWzT7Dcc5lUVEWVYtgd8hIkoTF2Rm73a6Ve/vSXkSSWZTinGOz2TT5+XjkxXCIq2uMMmTbly0RkfSzKGVbZZ0+0xf+6nzq45HySaT9YhJ+uB1v46QrXo7HrLMDI1ET6YC8luR5ThAEVFVFVXUr7fpEPkkSAO72BoCDG2KqmskkRIijeSmlsMr5ro/UVdUrpYjjGGMM1trGwJ5NDEBrDcDT09OHHfS64mviZ3Jrjz7jnOuD9ip/14mIJIFTAJRlSV3XJ7H/APGAC1cSAattAAAAAElFTkSuQmCC",
+  "t15_ball":"iVBORw0KGgoAAAANSUhEUgAAAB0AAAAaCAYAAABLlle3AAADH0lEQVR4nM2WoXfjOBCHv9wzMBAQMDAIMFggcOBAgUFBQEBBwIKCBQsOHFiwsKB/QED/gIULAw8ULAgoKChYUBAQYGAgYCBgICAgoPd8ILXa1Enq3luwQzyyxvPpN8mMPeF91l0JkCHBJgEAC3x3TN6T5D3B3TJNkGq6g1XN/wb/8R7gx0XC33PJ7INBqikyJABI4B9B90uhVwL+KiVFoUhvHikKRSHdnlKAy5HgUdBeEYDbLgf3JXAWBHJMsrFQmwS0FWhdkaxu0bpCWxGVypAQVDYamrwdsjNda+4poLZAjq51BEo1pZAO/Suhll0Je9Dr+4V0ND89eqSEUeX97mB7fhFBL4FSTdFWcDs759+RbTO2ZSbr9Zrk6zVu8SmCZUh4UCXNxSfW6/XoPn0rsFNKkec5eZ6fDDTG4L2naRqapjmZ9/VmV5YlRVFQFMWboEPg3qy1VFXFdrulbds9Tr/oZrMZZVlGkJTyaPJDe9bag2tjDFpr7u7uInySZVl3eXmJUmovWe9nBwDZkQq0L5QCtE/gXvVqtaJpmkkyn88jUEoZIccSn7LXz/Tr1pgo4ubmhkRm06gsk/IkbEoR/Wb0KHiGF/kOnGweHyjPvrwJBEjTXflq72mNOVnm1lqMrthUms1mQ1EU8XeOf6Tr62sAlFKUZXkUbPR99JdXS74uv6GU2gNuNz/ZVBq3fQDAOsd62xBCmLyEAnRZlnGhcr4svw1UtMYQfAVAVVm0sTz+WAFwtviMUgpvDfX9LZU2pLnDG7GrTGupGhtZgz6d/znlbPGZxcVu7L0sk9s+YKzF+d3bRaRJ9HvLRErrPB/yDC8M3gh+bPTBPo1QKSXnhUQKgXUOKQS1aclEig+BXEqscwB765d+D7XODVTC8C0zsdZ2dQvTEHA+4EMgE2kMMNaSS4l5NQwAvDDgRAS2zg+AcGTgGwdpkiDSpy8DIQYxafJ83n4/dTk+hFiJ2obBc8egE2stdfusxFiLD2EA6806R5ok8epDoHV+MHMj4OBRdtZlWUaWPn2SpLsS9+p76w/RH8r5gPWe2rjYIr+F/Qf92qE224WZigAAAABJRU5ErkJggg==",
+  "t15_candle":"iVBORw0KGgoAAAANSUhEUgAAAB0AAAAcCAYAAACdz7SqAAACrklEQVR4nM2WoXLkOBCGv7kyMDAQEDAIEBhgcDDA4EBAQMDAwH2ABQcP5AEC8gD7AAF5gIAFBwICAgICDAYYGBgYCAg0EBBQlQ9MWZuJJ0nFVzd1P3Gr5PbXf4/UNbBAT4+P45K8Sb99NaFt2/GlaQC4vb1dBM++mrBerzHGcH9/v9jtl50CaKXYbDZopY4ILcu9538O7bpuEehfQZ+fn1PsrD0O9LW6vj8+dG3M8aBL27oYKiI4Ebquw4kcB5rA1iILoatP9seqqijLkvKTO2mtJYTAMAwMw/Dhd99ujnVdY4zBGPMp6BB4kojQti3b7Rbn3B5nWoxnZ2fUdZ1A6oMRd2jvbauntbWWvu95eHhI8JXWery8vKSqqr2PTfGh+fre+Ht7qqeDNrm+u7tjGIZVdn5+noBKqQRZMlff5kxrZ20ycXNzQ6b0SXKmlfoQdoJJ8UD/5WJMuQNnzcsT9en3T4EAeb5rXxcCztoP2+xEsH1L0/Y0TYMxJv3O6SBdXV0BUFUVdV2/C7b9Y4qv/7rmz+sfVFW1B9w2zzRtj98+ASDe8/d2IMa4eg0FGLXWXFQl369/zFw4a4mhBaBthd4KLz/vADjdfKOqKoJYusd72t6Sl55gi11nnNAOklize3r++wmnm29sLi52sFdt8tsnrAg+RACKPEvxJF3kOB9Yl5pQWIIt+Nn0B+9pgiql+MMoVFEg3qOKgs46dJETYqRUCvEeYG/9Op6g4v3MJcz/mK1EZOwcnMSID5EQI7rI0wtWhFIp7IG5GwoLvkhA58MMCO8MfOshzzKKfFeTKorZO3n2q95pP/clIcbUiU7iLO896EpE6NwvJ1aEEOMMNkm8J8+y9Awx4nyYzdwEOFjKTqPWGp3vYCrftXhyP2kqYirKh4iEQGd9uiL/C/0DJyRz5JqIaMMAAAAASUVORK5CYII=",
+  "t17":"iVBORw0KGgoAAAANSUhEUgAAACUAAAAlCAYAAADFniADAAAFJ0lEQVR4nL2YL3DbSBTGf74RWLBgwQIBAQEBAQMBAwMDg4KAAoOAgoCDAQcLAwsCCgoOFBQEFBwICAgICAgIMDAQCBAQEBAQEFiwYIFmdECWa8eJYzudvhmPx6tdve/9+95bDzhe2jhQjMIAX0sACpdTWEfmBI1xuNwOjnnxoYdaEXUAPkaCUITEoeb07zEPixvmCwNAbRwAaWl5qjgYnHcIoNFEEkqBUt0xQ8m8KklyRV07auNwpQY64DGaZFRTCNXeP5V7A/vrEEBJIFHKw5UaYxqMaQAIIsc8NUtAm2JMgwocIpLt7wZFKMUKiJPVhlIArcTWmfV9h8je4XOV3F5rOi8opZZ5tL3nGNnbU65ptj49WGMM40T9FkAHgbKueXHdNQ0Xl3MARFAjgrpbXwtdmR9ST4dRQisiSbIjRFJ4CG8TgGsajDIHUcMx5LbiqtB1AFQQM/V9jO8jq5THpwKAFHsUgR7m104GLret1prkwweUDhiPhjhTcXv1nWByChXM5/PBITSwoeCYQ0AbBAEAUkrCMKQoCnzfp6q6XKrrmrquj3r/3on+XGphkFJirQVgOp3inMP3fQC01mit/5inthoxgBdP0VVFZTIWRlDlKbXzsOrwxrzP5nY0kUz1kKq2TEdd2IzxqcwTVd0130BHNFRkRUVtHVp2DO+ahtJYCtEQOo+sNG/qfCvR2zhQnI/GGOOT5vd8vS4pxJI4czsYR34b+Zs9zzhHShfW0HkEShJ5HvHQR4minefVTmC7QLWjieR8NOZhUbIo5ntZ2UsfsgzISoOIZFs/OSJfE/m6va6KV8P6GqgloAn/3T9xyNixC+QcS4ptP0jNqR9yTdG+BOx59bVypNurqyu+fbll4cK9APlaopXaG9xtWgwAvv1zQRzHWxW65akvZxeMx2OiKEL7PmmattCR4S5lSlVUBpSUUJut5yKSbaKHpPUTLreDRd1wcTJjmIw5+Xza2sUvTtvwlBxp1NLinz9/EgnB4+Nj93l4aF9iaCl+2eWreBduPn36xP2PW+I4bsMwJBIC7fuM5HBj3waoxjiyLKNesvLF9+/MHx9xeYP2fUIv2FK0Pj0o9fpQ53I7mM+7aeL8/JyTkxNy1+l7Lt6zg/QH47izOi8KAGpjKJryVaXQcRe8vidNU27v7hiPx2iluLq6Ali1pl622kye5xRLIHEcc3Z2RiAEl5eXL5awcY6qtvy4Tbl+vOsMcC8XdZZlg5ubG4qiIPHHfDk/B9gy9qXkbeM4ZjabrRrsv/c/WE/EdRlHfjsZhny96QrhbDJsF0W5k9NEJNvZ6CPQeS/LsndTzoYBZ5Nh+3k2XhXA2WTYfhgGRzXiXo6eElgOe76WpPmm+59Pn38S1Eoys/m7v1QcK4fP6HrIaRxz/XhHtpwQPg47qriuCgCkEVjVPdNOAd389btn9HY5tAGQaE3aTZad4uW67/vEwxFxFHB3d9dVWZIQhiE3NzcUTbkXsL3mKRFJQi9gOp3y8PCwemCtxTmHEAIpN285SimMMVsvs9ZSlrv76Vug2p5EeyX9+Nsr6MH0332bWgeUJAlpmgLs5a03E32dbcMwXCl3zuF53hYbG2NW4HsDiqJgNpsBXY4ppXZSxl61a60lSRKqqlopap5VmHpldFFKIYRgPp+v9qx7+yV5M3xKKTzPQ4hf/6o452iaBmstTdO8eL9zuV2tSyMQQuCc2+si8R563wDcX7eccxhjaJrm6He/h3oHy2Rue0ro5T2AAP4HORu2AowG2aMAAAAASUVORK5CYII=",
+  "t24":"iVBORw0KGgoAAAANSUhEUgAAAB8AAAAZCAYAAADJ9/UkAAAE5klEQVR4nJWWMWjjZhTHfy4aPGjQgQMR2KDBBxZcIIHLoFFDBg0ppNBBQwIxdPDBGTo0kEJvyJChwxVciIeChwz1dgFn0NAhkJTTkQQSSEEGZRDEIIMNp8FwgjN8HWx9xLncJXlg+LA/v/97//d/7305nm4iX1YppBqlUglN00iShIvBFen1KPcUR0+5LPJl9S6AsCwL13UBaLfb+L7/aJ/KQ4DqcoHd9TcYhkEURezt7Ylut5sDRKVSkcCe5+H7PoBwHAej/ILDgza9Xu+rwTwEzmp5RZ41TePVq1fs7e2Jfr+PbdsYhkFB0wBI05Q4jnEcZ/rnVZrN5ld9P0SRAFAUhZ9qP2MtL8ggCprGnK4TBIE8ZxYEQcYSU5butQczB1BVFfN5CcuyGMQxh56Hruu8BEzT/OJ+kiRsNX59UID3/SiKxSKqqhKNe5kDUSgU6Lx7B8CfzSY7Oztf/HEQxwCShVarxeXlJY7j3CvGezNfX19H13U0TSMIApEkCZZlMafr1Ot1Go3GvZnM6Tq+73M+BaxWqzKgOI4zQUr77q6DSqWCfqt+pmniOA4/Wi5v376V6s4s//GjBChiYFkWQXhDEAQAlPJ5hklCFEVfBDuTeb6sitFoxMHBAZVKBdM0ebm4yJJu8UP9e35r/c3caAhMRLWxsUGSJLiuS2tnnx7RBHQ8wjRNgiCg2WySpilhGN7L1l0TgFAURTQaDRGGoXBdV3wKP4swDEUYhsJxHJHdVRRFvD8+Fp/Cz6LT6QjHcUQYhuLm9FS8Pz4W+/v7QlEU8S1ACQqI7e1tcXN6Kmq12gzo9va2vGPbtngffxSdTkfYti0KhYJoNBqi0+mITqcjGo1Gdhd1uSBs2xaWZc0EkcvoLqQa/X6flZUVHMfBcRyKGFTfbEhKM2u1WpNWW1wE4PzyUpZC0zR0XSee6iCKIqIoYtNdI6/N459d0f3vnKOjo5wCoDzLs/t6F03TWF1dlSDp9RjDMLiIfZZ0SwZQrVYBGKiFiQam4Hd7PkkSAFzXJQXmNQ3GIy4uLoCp2kdnQ6nO9HpMej3GPznhn8CjWq1y6Hn0iBiohdlChVe0Wi2ZZRAE8qzrOqZpYlkWnucBk8XTbDZJkiQnaWe6sZbmFjAMg5OTE3q9HtlgmdN1PM+TpchU7XmepNn3fQzDQJ+O3NtMxHEsW63dbsuSz6xHmMztRqOBZVkS6LZlgyJJEhlQEN7wV/MPxuMxtm2ztrYGTDbd4uKiBO73+8RxLOd91udCUSbHWq1G2TAYxDF+5BMEAZZlYZomgziWdYTJFgNgPGI8Hsssb1s2sDIRfvjwgW63y21w8ksaq+UVLMsC4DqKqNfrJElCsVhkdW0y2S7P/+VicMXv9V3m5+eJ4xjTNHFdl36/T+XFSwmsaRrxNODsc3vYfHWxLCwscDI8Y3Q2lA8H27YBODo6otvt5mqvfxHm8xKe52GUX2A+L804CsIbGI+IoigT3Qzet1aeyJdVDKXIaDRimE+wSstsbm5K6oPwZpKhqkhakyTBNE08z7sX8LHgM0xsbW0BzKgaZmucfed5HldXV998Qj0JPE1ThsNhLl9Wxe/1XWDS1+12m7QwZnNlHdM08X2fg7PDR71kn/TUZTL3ZV9PezaXL6tCeZbP9PFoeyq4DCJfVlGe5QGeDJrZ/8MFodh/Ff+ZAAAAAElFTkSuQmCC",
+  "t35":"iVBORw0KGgoAAAANSUhEUgAAABMAAAArCAYAAACaebMMAAACNklEQVR4nO2WsarbMBSG/4QMGjQcgQo2OHADHuyhkCUQbfbYMWOfKA/U4T5CHqBjAjEk4MANWEMGDQZ1SOzaiZ0o5NJ26L8YS/Kv7xzrHAQ8lk3T1LKQ20cLhw5m8DwPI8EernMyc5WzGeWvk1kWctf9HpONBAMRgfPHpn82Zy65cjarJIT4PDMXPTRzSbyzWSXG/qEKsCzkEEKAiOB5HoIguFvso3uTb6MARASlFOI4xuFwwJFpazanwdNmQggYY7BarQAAxhhIQ9jj9DxZJa21y7K/1IJc6JzM/ofZ0t2jwRiD53mtsaIonjazSil8X3yD9xZBEkFNJlhtt/jx/o7lctn5UW+YSZKAkQdJdB4IAgCAUgpRFHXWaJeZVUph4nd3VkmExWLhTjadTsHIA1VUF33x/ZpOKXVDd21m0zRFHMedOzfpkiS5S2ZZyBFFUU0kr8jCRrftomuRqfGsproOsVIVahddZXZD1anLH+2jq8maVH00TR0vVdGkGwKwfCYRRVE/UY8kEeI4Rpqmtiab8a8AAAbTqsOj1jhqjY8876TaZBkAYD6fA7iUkzEGWZYhy7I6Z0QErTWICESETZZBa408zzsLn8+kHbCQW2nOBuPxuC5k3/dhjHEO+We5PofJ9B4cJ+x2u3pyvV63O8THtvVeFEX9Xj0HAKyUEpKVOIG37hYuN5/KLCv3r7ftJu2QhRxlWUKMf58xV6Lm2pFgZzJZ6pt89O3eN0Y5ez1nlWlW7vELpr3TmnTgAUwAAAAASUVORK5CYII=",
+  "t36":"iVBORw0KGgoAAAANSUhEUgAAAB8AAAAeCAYAAADU8sWcAAACQ0lEQVR4nLWXQWvjMBCFXxcv6OCADApkwAYbspAccughP2R/eY7xrb25kEAELWwOAe+hlWpLM7JD23dJLI/0jUZPUvIAXr1a5/hLj0BZAgCstdBaC+GyDocD2rZ94N5lUqesUAAArbUInUrIWoumadC2Lc+QOpavBnVpgI/BHYiIoLWGtdbHbrdbWGvRdR0A+Jjj8ZhMToRXv9+w1BqnQZsbFHivSNd1o7ZQRDRKMtQv6YXRTdQmQYywNKklS8IB4DTIejiI++5mff6IC0Fu1pvNpp8L79U6R20MlsFgV/syGnQIcZ4IkyQiEBHH5te8zsqojYiggmTmbr3VajUfXtxs1KZwFQcPZ+sqMZUku+ZmoUbPDRVQeuXLHirl6JTpWLjOF+/bLCiX0nz5UmDfd51HpmPhN2icrMXyhZ9pCJiz9pyPQnif7w22yKKZSyUPxR25RISmic+NaOblq8E/o6NAqeSp9R6Kq04E55wuiQNLSzALHjodAJ66i5iAdKqFMbPgnNOlE0qCScr3ZuT4CH5DnCF3wDhoCB/OcviOiLDL/oxih3Dv9DlygLquxcSkPhwcu0vGOv2K2AdToLvhnBoqJn8qcRDpfhfhnNOB9AEz92bjEhrBndN/UmVZeseP4JzTgfsvFElEhKqq/LOD9/nefAtgSsPS+5nvLpnfZuFV+hVx50AE/27NcbyHm4Vi9/hPJBXBv6J7Dhrg0/GZWud9VihotcDz+YxnpaAHgz0BQOJWSyXg/j65TxdXVRXOyvb/AblJyUc5sGpZAAAAAElFTkSuQmCC",
+  "t37":"iVBORw0KGgoAAAANSUhEUgAAACIAAAAuCAYAAABNhcu5AAAEGUlEQVR4nMWYwWrrOhCGv1yy0MIFBVKw4RyQoRd6F12eR7iLPmkfoQ/QTZeGLhq4hQpisKEBC2KoFobehSNHdm3H7kk5P4TIkWP9nvk1M5oFgLgKPpRdUhIQBAE+VqsVYxBCEIZhc53nOdba0f84bLdb0jRdACwckUpblKgAWEoJQMmRVJfg76AsSwB2wmBfygXAEsC+lAtxFXysdiX7oCaxEoIVNbH1hWC3N8cnXcajCxVFcdKSNSNIqUktvJ8//r35QShX/M2a/dqyJOTyYJ23MCSO6odbxOCzsywDIIoiAKSUGGN679Fac3d3twD4a+iBS45+f/M0cAqOwBCJIQwSOQemkoBvJjIHk4hc5jkAr1nxZ4l8FfIg9CmYRGSOWH3M0cjy8N3auu9rCcCllC0SbvsOobt1h+aNMRhjeHh4QFwFH/alXCzHSPiIo9Vo/HDoksiyrFnYt5BSip8/f2IqC5Tfq5Esy0iSBK01xhiUUgBYa0mSBCklv4Ib4OiaSRDYSVYBeH5+Rmvd+s0t7mCMoSjqnThokbcZQoOj/93YkXBWcGOlFGEYNoTiOEZcBR+DRLpCPQVfG1rrphRIkgRrLUqpZnEpZTN2uhnViAtkc2GMQQjRLBqOvNB2u8W+lIuzidV3jYNvgSG4OudsGvEJ+RXa1Og6qpE+CPrLQKeRvmDmawIOukhThBDN/ZNd85oVWMTk7esWHArzO/MKHF3aIvJ8KA3h6BpfsFmWNX889Q182hk+lj9uWtcNEVPuWdLPvouuMLvXTiNjSc+PLy0iABWSiqMFnFX6ckUfgb7FhqwipUQI0QS0JsTL4IIKSHdL1Br0IQ5oa8HaUTO7B3fnN5tNa86/N4oikiRp7v+Ua9R6DcCvA5Gh6DqU6qMoagi4oNYHZ82iKKYFtKHo2ifOvmsfvnsfHx9bcy0i/xwM5MeQUxbpWmbIUo5AV6QOk8sAt8ApgTpYa7m+vm4IdIOac1scx+gqHc6+XfgxZCqhzWZDfnBtn2CBYbGeE34GHsJksfrw/T+khblwh/U/etK7vb1txDuLyFyNSClRSrVqV1+8fuT9Fo2EYQhpijEGrXWjle7Wvb+/r+f9ED8FcbRqzr9jGpFSYtK0GUNtiW4Vn+d5XUjNFeucQ7iuqk95SSmFMYY8z5u6No7r7tOXxTonsLmywOUgODZxnp6egG+OI34vrdtp1FpTFAU7YYCRHtr7Wg7mnCiKTh644XjkfH2ty0K/wedOeJvNZriHtl+Xo286ZxtLKT91GB0JH71ELnbn66m6eOEs10cCzqCRMdd057q7yCf1JSK+Rqagm/T6ys0vbd85GvEbv+7TV0K2LFK+V5jlnv8CqHYVerdDrdd1Ia11683cOIqi3jTv3rrbrvKt4XryAP8DHyA/qMX+MEAAAAAASUVORK5CYII=",
+  "t38":"iVBORw0KGgoAAAANSUhEUgAAADEAAAATCAYAAAA5+OUhAAACEElEQVR4nLWXsW4rIRBFr6NXUPCksUSxSCm2cGF/gP//R1JQRNrGkpGSgiLSviIaDCwDrPNyK+/uCHM5MzAcMKbVGAOlFABAa519PB6PAAClFM7nM4gI1loQEYgI3nsQUYz33sN7j2VZ4JyDcy7G3e93AMDtdsMnBYS3z0Nvci8jBtRJiwZYSqkYAwDLsgwMvRUviDEGf46qE/2tERPQXh6M/xRAttqlvPfV90SEeZ4RQth8e/0wUCe99ubXM7Hqq8lWeFTW2uy5ZpBjiAghhGqMCdt3pbokaHkYkFLpJ+JaABBppHS11l0aLROrvpqhiZT1MKJy1ed5jmOV6tFokthLoVUTrTh+DiFUTWitoa9GpCGZGKKQYu9JKmzgYSI1UI6dLmgpkcSzFEZp1DRN01M0aiaGa6ElNsMEJHPpDgXkKTVKozSxqpPeRUEq6t7kn5FEY0Ni9JTcUw8jYrPzPMN7L+52NRqpiQ2F/6laYUu7FAAxpWo0MhIlhdHDjRu9mlq7Uku1NoT1+pHXLJvYRSHtWkXsjVUuVbYo3Eu1DtCURiQxWgu/qdKolFJATuMFAoWf9klpGu1JqfTga6UU8KBxQHHhiQGCiVrrXdZE+ttaG+8W5ZmQmuMYvjABgHMumuHLUin39Y6DOulVarBGjADbpm2aprhVXi6X7ILEt7i0ey1NsRHeaplIzcj73xv+AZtpzSJyF8CVAAAAAElFTkSuQmCC",
+  "t39":"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",
+  "t40":"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",
+  "t41":"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",
+  "t42":"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",
+  "t43":"iVBORw0KGgoAAAANSUhEUgAAADQAAAAQCAYAAABZRVzLAAADrUlEQVR4nKWWMWvsRhRGjx4TmGIMI9CCBCuQYQ1+kIAfZCEuHrw/kCJl8idTpHCRwoWLFC4ccGGDDRbsggVe2Ase8BQCpdgdeVa7azvJbVYazf323DvfjJQA3a9fv/IZRYgbWsQYvPd47xmGtba/Pjs7S46Pj7vfRsXGnL+MBsB7j9av1+Fea73x7OHhgfnBgp/15//E4r3n/Pw8UWaa9Q9fMsvIWqbAkwi1tYhInwCgte5FRITxeNyV3zkAxj9qRHIATkSo17Dhj4PW8F5ESNMUloDeZrmMChGRniXP841xPTGdso8aDuE581FfNiPuTFyMiFCWJbgZN7S81JqR3c4XEZqm2WhIXNyw8y/ZDpFBMcNxEaFSY1RZllRZxiiy0dO6u7sERARrLVVV9ULf51DYyca8sDqxht6zYqHTWmsqa7dYiFhim4YILFprEjPNuvFzRlEU/BSJPUWWCWJBKMBcX18DYIwhTVO+5fkGzNAqcTFxXF1dAeCcwxjDl9Foo8nvsTRNw93dHQDJ6elpF4PcRdXHHh/G0DYnWv8rjWFRAE3TbDQ11nqLJYT3nmQ8HndlWWKt3Qn1lpCIsFwuASiKgjzPma7zhvnDAkNDrLXUdQ3AcrkkTVOqqup1PsISrDibzVBSeI7WG7UG6mCT9e+uTsZQoaBggctBfqwRChhGOMKdcxRF0etU3q+s9gZL0NVac/V0zSd3ueDx8XF1SnjPVGuqgfd32SV05fb2NnHO9XOG+fs0gk4Yn81mSLHSFBGma7e8xxIfFv7eJf1J7b3nb7bfH0OAOC4uLlaihadciz9pjeQ5ls2VjHOHUHVdM5/PE+bA6VHnvefPplnlvMMSmvL75R8AJNGcTk8Mbb19zu8KVWn8vUuG43piunHjqL2i0i213/12M8YA4LP2f+kMWbZmfTEttl1dPwALZXeKeNqd45VXYC2/iHBtLZXIXg0AvVDsa2Gq4FC3iAJ0+yGWT1swsLLL/ob0IFtjE9MdOKEUYb5+WQYIpRTGGIwxKKW28oZa1Rsr8hZLKKjTE8OBE2y7KuhDQgOQyiuejUUfVf1Y1gpKqf4UNMaQZVlvuSFQ0A0sH43A0ivFq/NhkcguemI6PJSpwZoDfNsy8wZjAf+6Z9I03dBwzvX5YR8MV2f5TmFKKYwoPA6lJ6b7YeHACSctCHAO0O7fPyF8tko4HtsuRTM5HAHQyJKbJRgcDkOWma1CYPOj1N+7JGapWqjVazH7WMLqL7TAAv4B7NFh6UoPPpMAAAAASUVORK5CYII=",
+  "t18":"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",
+  "t44":"iVBORw0KGgoAAAANSUhEUgAAAEAAAAAiCAYAAADvVd+PAAADqUlEQVR4nOVZoW7jQBB9PhUYGiyJtJZMIl2BJZOCZaEBgfcDZe0f9Df6C/mEANOwBSWWDApMLNlSwBksDNsD6bjrtZO4p2RjtU+KlLXX3pnZmTezYw/uoDnnCMMQQRAMTlBKoaoq1HXtuRLK2UIAtBACSZKcnBQEAbbbLaSUTmT75WIRE2VZdn4mgiDAarl0Ks+dy8Wqqupdy7KsvReGoUtxALgJAc05PzspDENIKT3OuQ7D0BkXuOIAzTnHfr+H7/sdxRhj+uHhAQCQJAmUUthsNs6I8FqLaM454jgGcGB3IjXOuY7jGHme9wwxn8+xWCwghICUsiVDzrkGcBWjXIMDtBACQRAgiiJkWdbG/nK51H9+A0XpI/1QhjGmAWA+n+Pl5QVpmuL5+Rl1XXtCCP309KTLsoRSCnVdX1zYSxugF+9G2tPAQfn12xteX191FEXtvDRNIaXEZrNBHMdYrVY6CAIopQAcMoQQQl86PV7apTrFThRFICXM4ufx8bH9/3e3wyZNMZvN2mu73Q5KqV6aBLrhdAmMedFgBUe7Ry7+1fgUQmhzbFeHURTh/v4eURRBSonZbIb39/fee2wjkccAGGWocxN6O2oLrJT6LyPYBjBhvpvqA+IReyNMhYdwTi4PH6T1HXDqjGGDDNMhQZt0zB2fCigjHIMtc1mWPR5SSlGK1r9o95MkQZIkR604BZxSfsyGJUnSm+Mdi8UpG8I2whhZh57J87wlwW/DA1+BlNJzfhyeGu5+cghwznV7/PyJqKqqVwi1x1Ybvu93GhZ2A2MqYyqYhnQAgKZpOjqbdcCg8qbii8UCwKc7TXFMHSaqIm19GGPaNEKbBajkNR8i5YcONFMcE0he2xtIn6IoWk9oPWCIB0zlASDP8879oih6z9wavu8D6IZIURTtdeDQewCgm6b5LIXtmKIHTMvaRhpyMdewuYlgb54JszlrEoJmjHUsZb4MwKDL3dIIpvKnToi2B+z3+34IAPCapgGMro5pWbvBce5Q4hJjZTMVJwxVgt6x3ht9tQH6p65bY0i2qqo6RGgrDxzvCXp1XWs7jpRSbY+POjGm+w8tcA1QI9XEkGwmCR6T7WxT1EwnZvuJrrtS2gStSe1yu39o9jSUUidlPCV8S4pDLOv6K+4xHCvlzVrgXEvsFDRjjPImgENTIcuymxc9Y4qiMZt0LgS8pmnQNE37sYMWItYFgO12O6nxer0e7Z1jP4x4UkrNGOtwAmFK46+G5j+bIvsh0zxpJAAAAABJRU5ErkJggg==",
+  "t46":"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAC20lEQVR4nO2bPWgUQRTHf15CQlQE9QQ/IAEhQUuvEcRSsFW0iJUIIiiJFgqKVUAQbYTEoKCVIBgQxEoQrSU28atQY5UUopKIgiZBz4vF3hh2crOzs7N7m3Pfr7qd2Zl9O+9/b9/MzoJQbFZlfYEbp8uLPu1PjcxkamMpy85bgdRH19fjNtJWhCjAtwObx/ftXuvV/9PnPyLrfRUhCkja0OT5h+8qya2JwYEdEw3LkypBFODaQPe8/h8fuNPnaVI0o0cnQ8d6jHBVgigg7ok2z/dW9gCw/8xMGnYZeTxcBuDDxLNQeVIliAJsJ8T1vPJIs2KAfl2FqxJEAaYKV88rmv0U8FVC4RXQ7trANOIK3UM6Qzejc/uhk25zB2WHzS4TogC9wPTfTzrCzUJXAgTHKhao+9JjQeEVIAOQtwF58y8G2J77rYq6D1MsEAXYTljp0V/HNS8ovAJkAPI2IG+c5wK+uOb6WVN4BcgA5G1A3sgA5G1A3iR+CvycrwFw+8FXAMZfzwEwdrW74fn9F6aD+itu9YfPTQHQ19MJLC1iVmvB1OX4wQ0A9HZ3Ot8DiALsCjDl1pdufQFg767VAIy/mcvGwPbA55cHN4fKpz7+AmD43iwA185uaWinDVGA+qHmx2q+rObPpnWB88c2AbB+XRsAdx99y9DM5fRs7QDg8+zvyPNs7wdEAUkbKs/nxavJBQC2b+vw6kcUoBeYYoFaZ2/2ClG1GjzvL17/BMBifeVyTVfgu8Ej5YZ2ybvBmDjHgKTv4kr18a/V6sf1of9Tz+jaDK4w5QEKX0WKAkwVtrxg+bu46cgLqVz95ft5ACo7uwB48XYhVB8X2SGSEtYYEFcJbaXovODEoWDWNjoW5O73n3wP1Q/0b4xlcFqeVxReAanvFF2KCWFco3TcfmSnqCep7xY3zR5NHjVhUozp+wHZLZ4Q+WLEp/H/gHw1lmZnrYh8OZpl54Kw8vkLXck5inNhojgAAAAASUVORK5CYII=",
+  "t2":"iVBORw0KGgoAAAANSUhEUgAAABoAAAAiCAYAAABBY8kOAAADqUlEQVR4nKWXrXbjOhSFv95lYGBwgICAgICBQUBAQUDhwAHzOPMIhX2cgvsAAQEBAQYGAgYCAgIGAl4rF/inSW2nnTsbZcnK2d7nZ0t+YkRVVdf9fo+1ltfX1yf+Am9vb9e6rjmfzxyPxyeA7POm2PX8/v37WlUVIoISAUBpDUCZ5wCkpMlzT5MSAMF7GueIMeK9J8Z4F3dBJEWGHoNOUFoPBMYMJE1/9zx4v6rsluyfDfULNClB2wKQl4v3I8RIiuuECyIZ07SGMs9J6UPpGlkuGn+jruu6daI1KL0dfKrPhElR7PrtGtV1Tdd1vLy8AB/qgvcorYfi3/5zSuNNwEROjBHnHJfLhbZt5+5da+OrUgqlFKJ2WJMhylCVZpHaGCN10xJDS4yRNCo8tidS093FXiZ6RJ8f6DOh8SB9gSNDqfvtIWTYvkOUQZSBvsM5txpvlSjP88WaxVHJoKq0lhAjMfbAgRQ9zkc+leVrImMM1iZEEiJCVVlEhL3WpDF9Js9px9+Ng6mC6VODPCSCoRkGkorSWkyek0RmZ0BrUkoE7xGRuctSSov6bBKdwwVxwn6/p67rYdFa1IdkAEqG+Zra3HuPtZa2ba+3HfdQ0YRbO7q1oQlH52ic43i6cLr0xLis7ybRwTxjyx1WC9rau6CXJhJCJISOECL+0hBDBIZ2T+FfPqvZJPLek3rH+eyAE4XekWmFUgK0874wEtyiKIpVRasW1HUdoSvoM0OfmbUtq1BFt3D+CV/W6Dt43mVIkQElzq2HXF0tioJ+7cGIIYXww/aImLm167pemOlDIhHB2gT40ecEaw1KhMNougC0LU1KDwm+QWSZjvOqqlZbew1bzrDaDJNLPzoIFwTRz/eFNawqijGitZ7TEbynvJkn4C5tx+ORU5PjmkS6OVW/JEop4UcPm1Q1KWGafr75BO85nc/UTUvji3lot7A5sOfzeVCUFUiR0eY7lGruhjSEjP4bJJtEXdfReE1IOdAjqiDTXwdTRUdMf+AM/wel9ux3arOB/soZlBJM0aJfLGA3O26TyBiDiEdkmAlRGVUpiPR312SAEIdUeVc/fKntgS13HJ53AJTWLq7FU3sPZJFcNPi46RCbNRpMkuX8fCKZEONA0v3BHD29v79fnXP8+vVrVqi0pkmJsm3BGMqRMABKBDeSbZ1Hj76DrsWz4mf5A2sth8Ph3vPalqNz89DWlxPee+q6Xo353Q+ua/GsMN18PaEtAn1cv/Gs4T/ZfumQpySViAAAAABJRU5ErkJggg==",
+  "t22":"iVBORw0KGgoAAAANSUhEUgAAAB8AAAAbCAYAAACEP1QvAAADuklEQVR4nKWWr5LkNhCHv00JGAg0EBAwEDAwWGCwYMCCBQcOLAgIOBAYsCAPkEfIAwQEBB44eODggQMLBgwwWGBgIGBgYCBgIKAqB3jGM3PzJ7uXrpoaWZb6+3VLavmG/7bJGIPEAVHHL0Yt6DGcTAgJQmYYhuHmmuNzL6dCQwVUaU8zZK/QOdtAnEWohAdqoB1PWYcdU1Zo7vuRhy30HDCVZmk7GfFBL8+qGS4K+aYSz1YT23Fh7hrT3b2myjXypUcuwFNpcDLizDg//1ah/qkB8IPGB31RQFCJ8Gipu5HN8yxggf/x5Bg+egSQpK6m+TD6SxGfhQPmV8eff/sbgGVRhxBfBX4N7HszZJAiqMQQ4t7PrtE3GcI+1bsU/x87XAZDRmCk7vY+FcAv7w0PPag0b558leFMvwxyrnwb1DfzPDNCAc9f5hglKapc81IwxXa8UQCF07Bl3T8mnMt/KNKLYh+bRcDPfaK2sGnhJ4CvLwP570K+ev1ZfquYfJVRrYT+veFlG+jRUXt3a1jdyTwhn4VYaxcnXTv3Ke0B8F08Gte1GXmx31AAfd8vY9ebwF+bkXEzHB21Q5sKDaLApblDfjDisP15zlc49X3H95PdAVySQsr85BTsqpxv/RE0AEEB6bz/S4V/eqePwa5w8/8W/HC335TfNt0iIDQdQaVFhAe+non6GhxgWhWW276n2oJ38Ie7HPV7RQyOSI3+6I8EANSt58Va1m1/kXH1ytuJKDRU9wYRxaoSbHaHzROjmrMweqGPG9Z1wL8ovO/OrvGPwE/EZIXGqZyqqnDO4b2nrmuapnmTv6sb7hLYRAENdV3vj1Lq3ujqbfBJKYWJwu3tLc655YX3Hh0ykopTSunV0V+CT1mh0SEjy+YiorVGRBARPnz4gIhQliVD39N6T4yRvu8Zx3ECiHEuNqPEow+IQzvpzAo9mShoPe9cay3WWsTklEW+RGxEWDnH2nuGEAgh0DQN3nv6vifGSAhhFjCODFk4EXESuVM5tphLalmWiAjWWpxzGJFlnLEW8hy8x4hgtlkpy3IREkJYhOigaWiup905hytuEa0W+CF0Z0VRENvj0rUbt1ueHTwcZOYqPIRAWeSLg3NggNgmskJhsAz9/u4/HH8o4tOnTyc+TuDr9ZoQAk9PT8gFMECHp+guX8FGhGEb7efPn8/WgKvlVd8ZHot3OOdO1t1YS46jwy+RDyEsG66ua56HzXJ9nrO3VKQpKzRKMvLRICJkWUaMkVZ3xBBJ4fKxOmf/AokpxhI+3+6uAAAAAElFTkSuQmCC",
+  "t27":"iVBORw0KGgoAAAANSUhEUgAAAEEAAAATCAYAAADPsWC5AAAD7klEQVR4nL1YrZarOhjdPQsRERGBiEBURCAQFRWII44YMQ8wYsR9pHmQkUdceURFRUUFAoGIiEBEICIiIliLK2gyMPyUzjp3tmlJSPi+nf3tBHb4fnREUOTJEc451HUNAMiyDGVZoq7r3XcH9Dce2BFBcYgz7Pf70JjnOSpZg9EInPPQzhgbDTbGzLYNobWGsS1SkaCqqtB/Pp//CmlfnaDL8xyMMRwOB6RpGjo+J3QPSikwxh4eB/RkGWNQVRWUUjjJM5y0D+f0yICOHmP8c3wBYyys7nD114Jdatdag3O+SsI9gjwZQK+ay+WC0+m0Obd7N3ZEUOyjZJTsXmTIj9nWZ6wmsUUJSyTO3VfJGlV5BeccWmtcbQmmyWrZrJHQEUHxS/zE8/MztNb4/ft3CHZYCj5Ixtjo/9bAPQnxbUyzopyl60rWKArVX7Q19vt98KXTn39hrV0kYomE4OBe9sPVUkpBaw0AIIRMEmZx0v/SCABGxjiHIbFrqz7Xp7XG6Sz7WKIGaXbsDfSmCB+jUmqRiDkSAgGEkFGQPsFUJNBaQykVAnPOrSbq2jj8J1ET5t6LLJD1VSilQlzD5F0bj55ljEFd1xMiPpMQCAAQBgNTebM4mQRvbLsYqGnq8bUxcM6Bc77JXO+pCfgwxbU5lFIomnK0iwyz6OI4xlH0h5iiKBBFEYQQi3JfSxroy8HY9kbWlLStyW0F5xxpdgxKAHo11OoCrTWEEDgcDiCE4IJr54n4cbu3S5IEx2NPQFmWAIC2bXG9Xkey9wRsgSdg+Pt/IxVJINY5h6r8A601KKWQUkIpBc45fomfIIJ2wI0EIiiEEIGAtv0Idngm+Ao+E/EZ3mC/irnxeZ6DEAJCCCiloJQCACil/cGqbvvdLe63eV8XHREUsWOw1o4mTNM07AwTFbQW7+/vAIAoisJDgQ8P8cH48VtLopJ18BFjDIylQFsHRVpr4ZyDMQYvLy/I83xCjvcHKeUkL845qqraDUkYovMJrBIAoCgUZHUaGegc/M7x9PQ0a4JzJLy9vcE5t2luIQReX18nfcOdwivcGDPJ+cdkJLAzxoyOsksHn1otO/EQhBDEcfyQnwgh7hLgIaWcLQvvD4QQZFkGF8970hwJAAB1kx5jDIjopN809d2zwRCc84fOA2l23HwvABRFMdvuy0RKufhytRTVzkmLi7x0ZSvBzn2tM8ZCjSulws1bZMs5XzTHOaQiwYnSSS0PMVyEsiyDYv0ZRGsNay0aYuDq5bfLexHt7LXBchiz6Ij4UA5pomCWaC0AtjrYfzsA+jJsmgaWjRW3tKLepB/Ft3/Fwe1M4uEJGq74d39d+g/pDi34eMUycQAAAABJRU5ErkJggg==",
+  "t28":"iVBORw0KGgoAAAANSUhEUgAAACgAAAAVCAYAAAA0GqweAAADBklEQVR4nN2WLZPjRhCGH6cGCAg0EBAQGGAgsMAgYMGCAwcWHAgMXJCfkZ8QGBAYcD8gwODAAQMDAwODBQIGAgICAwYMEJgqB4wk68Peu1WqAu6tclma6lE/87q7rRXLdfkYwwYQr24GlMpTAl8dq6VJlm68/BaD9oqE6JvBhobfG78o1+2jf4dKwCqP4IAAe0uSZySFgTbuvVoMKDfWOjezx/Bd2njp43v9tHSj/c+pv0+LAf8v/biAdnH1vk9vtX4/56DtWp2RigBQW4utKrS/Nsxw7EwbRRWG83Me9pqG5vSKbvftFBztbZZbiz3Y2sd9stLGHOJxV6ZJuE8lJBapZw+zNqW2BeDblWC9LmtUYfo4Q8PfynOeDPUp4GUdwy9vwD06hxaHTsJcK01MvfmZVCczuLo0pKdjABrE72TdQ2pxVIfmLuSsBj8Mrn2e8NcA7ulYogpDdWjQOme/VVSHhsdqR5r50QcgPR1DbOJG8S/qRK6FZvOBnei+HBIiXiYDf1bqJwXaQ5EHR6SFS0+vwPUn/vznub/WOse4Z2RT9muJ02ztHkXDfqvYE+KfPnn2W4X7NW1L4oEdoHODFodp3bzl4EUphYsFq7MRHIQmMTQYxg/weULxmI/gAGRTol+eZvH7rcK3h091gkhNKg+UOmEnGqv8KH5Yg5c8EzKJiZSaAZ5rgzc10natAJu1Rr88hWSZJ3HPfbyJvwBw2luaXYEtqlGHD+u2Lg1FeW2Y7fFMUdnVEPDy8SHrAzrAKSSAdQ6JY9IkJtfSr99qkk7FaT40px0fuv2V2gTHvxQ1xpjVCuDTRl86EOvGbx1TwB4omYycN0bNPVmbju47wDQJTv/xz3E1O9o9oKlqM319Ktok3b3n2zKzlQ6uc1IBHCrHWhriSBEpNYIcOpVK/i6H3tLUPQgOAhSl4WwsMKhBpRQiQhJ5JAqniKOrwUPw4T9IB3yvBuu2+O8B1abBOodxwbGz9Vhr8d6PmmSqHhggia4/Vwe/VLa5jh3TKLz3OOd6oKn+BX2MU2UUxHpRAAAAAElFTkSuQmCC",
+  "t29":"iVBORw0KGgoAAAANSUhEUgAAACgAAAAVCAYAAAA0GqweAAADEklEQVR4nO2WLZLjOBiGn2wJCAgIGBgYGAQYBATkAAENAgY0mAPMARYubLBg4B5gwYI5wIAFDRo0DAgICGgQYGBgICAgICDgKi9wrDhO3FOTHrhvVSp28jl69Or7yYz71cq5QuUalWukVhdfBufxlcNXjlD62b2L3PtgmzxkEUxqORkYXMAeauxrfdda4k5AfOW6i7xza+zgUCrXWOq71rkb8JZuORlc+NBv/vahp29IJQqVTLv5s/rlgL9a/wN+VO+VfqtWCckyJbiA3lkyrUi1BsA4xza42AeB2HL6HPTWA12hBOf5bLsiMjawr2rCJiO4gDuYyV5568NWrRKy9Twu5q1n8WKvAtMTSKoLALQ2VzHHvh3RnN7PjWO3SeK1LS3N3ztKf8k0BmzlXJE/LiLc5/DAbrdD1G8AvG2Siyr11vO7laR5wlimsnwrxEXspq5oTArAej3nydd8UY98l683Ia8AhxMiOM9i79FKRTjoWsnX/BNP1TMAf4ia7ORihKsFT76Om1wWkqfqOULOZREdfl2d+6c51Jjv5TRgP1+XBqQQEW5bEKfFOM/+TB3r1ePFD7lDzmP9LW5oqCGkcynGvSFSi3WBQ+3Zb8/5OKziVghBHsQVHHSjLTh/egW89bEIxu4B6GXFV5XhKostbYwdKs0TtDakekFjEnTIyNXlNBo62BaZJtMKKbq8GQKWxnLAI07jTGrJF5WyXndwadaQ+E2Mt+oF6I56e9zyT9kgtERqyao2bIpVzFtTWY7VuQif9yXH2s2GgO3DIosBPeAYEsD5LifTRFGc2kvvxpSOh+uRP674/qiN7Wb3y9FgrZ3NAD4t87YHcf7yKMaAEWiUV++1mik5l17c94Bp0p3SX//uZ1dbmwIay1zl1PG0SH/f8GPd6q3nZg6nrrmrPXMdUFJcFcfQqVQXP+XQexq7B52DAMfKUloHDHJQCIHWmkQ2aNntQsmzwUPw4QTpgady0JySfwrI2IDzHus7x0rX4JyjaZqLIhkrAgMk8nxcPfy9cuH8B9YGQdM0eO8j0Fj/Ab8Xc4k0QjBbAAAAAElFTkSuQmCC",
+  "t30":"iVBORw0KGgoAAAANSUhEUgAAACgAAAAVCAYAAAA0GqweAAADPUlEQVR4nO2WoZfbOBCHv9wTMBAQEDAwMDAwCAhYGBBQUFBYuKCg4ED/iIMFBQcKCgoW9A8IKFiwIMBgQUCAgYGBgYGBgICAgd9LgWMldpJ977IL74dseTT6NJoZecbt2qtohdYxSin0PBl9dLWgqZ4xpsLWm9mti9w6ca+iFUmyQM8T0jS+algUFWW2pdw93LSWuBHQy9WCbV0jo+6qjZaO8kb/rwY81aVIFkX1Kp9/vWr2BWkt0Vq+mb83B3xr/Q/4Wr1U+r6VWGsRZk2kJKFSADTWsrUJSbIgUCkAMupI09jnoDEO6AvF7jYsddXPNS3bqkYmn7DW4pylKdcXWS4NerB0dXdYyKJ3P84MwwNIeABUqjmzKSp7eBra0LFx5NE9AForjLHsHp/OQKdtZtKAI7IsR5nMG5jF3z5KRVGTi598MQ1hrAE9ctZUhjy69/bGOIqiYl7/AuBL8kzWRNQolss5ALtH9qeQZ30wCBTWWshL1nlJaNcIKT1cv2OJ1oo0BYrP6Pk3f/QerhZ83YQky+OY1pI0jcm556P4TVMZuqrERBFZ1kdayrGfM8C27Q3j7olACNQBrhDvCOrePMty0jTGGIsxFiJIknTkR7sY2FBmWwAfxTSNANiYe1b2V58e9QMiNBjbYqS7CrgXQhCyIwrkCA6gLHdo3cMrqyhOJkZqDAegFhX/fur4/N15SK0VUAN9XoeJhqoB5jRNjgJiWbHlCHmakPs0UkSqhwPGgI1hhyNo+8JJkgUrlbFa9XBh1KHde29v5CPQH3VWZDw8LZBSkSzvkOU/vE/vDnnb52pRGT/397akqO3sFHD/bh55gwFwCglgnUNJSaglaaz8+LDYJRW78yt/WvHWhjQ2pzEtAI9FgzFmNgP4sIj3A4h14xyYAnqgyX37Uqu5JmvD0fsAGOoAgG/r7exsa9eApmqMm4wUh0WG9+u/X0eZs5EBboikAHiuHYlqkYE4K47TSIUq/U8ReknT6EEfQYCiMpTGAic5KITof92DDhX0u5DBMcCn4Kc3yAB8LQebQ/JfA2pMi3UO4/qIlbbDWkvXdaMimcoDA+jgeFwD/K2ybeufTSvoug7nnAea6g/YL2Zj7f5wvAAAAABJRU5ErkJggg==",
+  "t31":"iVBORw0KGgoAAAANSUhEUgAAAC4AAAAfCAYAAACYn/8/AAAEcUlEQVR4nLVYq5LrOBA92RIQMBAwEDAQCDAYYBiwHzBgP2LgfMQF92MW7CcEBiwICBgQEDBAwMDAoIGBgKt8QdKatvxIMnXvqZpKMopbR63uc6QAfwZDnueDUmr4Q/GxWZpYKYUsy+KfRNd18ZWIlmJMUJbl4JyDMWYy5r0HEaFpmhjTGDMopdC27WSO0T+UUkOWZVBKQWsdCcuJtNbQWiOEAADxlYjiYuYWVBTF8PLyEuNxzKp08A2NYnjvAQDv7+/IjcGPnz9xOBzGXOUHY8yIMBNZAn8fAKy1o7EQwkBEaNsWbdtusiyLxEIIICI490VaJqiqKgDAfr9HVbpJ7AlxAJOySD9LMBG5CF6I1hrGGDjnEEIYQghxLIQQyXjv4w4QEYwxsNZCIyBYi3CbpyiKoa7rmPVIPM/zIc/zRZL3wJMCX9nnhfGCZInIcZkAIoK1FtaVICIQEaqqiuXDiCswxgzW2hhYBnsWHEOS5F7grKffYWLOOby+vsb5jTFo/AW+IRwOBxyPxw3wlfGJbPHWfZc4EcF7f912UUJpbN4Frut/Xl+R7/4GABz/+xfeezTNNVZd1zHGpMaB8bbfg2zeoihQVRV2ux2MMdjv9/j4+ADwVfNLc729vQFuCwBoj/+jJcLlcokJSJMYiTOB75DOsgzOObBGB2pwvE3K0imJpzXtvcd+v4dzDgBiaXjv4b2H1hpENEqS1MZBKQVrLYqiGBGs6zqSA67byzXJzTMHIkIIIRIPIUSl4caTasNjwJch8fMc73K5bB4iznorHY8n5TF+LyENKh2z1oKFgJ9N1YYXxOPSUVPicQHGGJRlOTIX5xzKsgQAHI/HiYbLDKaYIw9glJB08TLbn5+fE9tfPatst9sY2BgT7VlOIt1QvkolCSGgaZqFqa6J2e12ADDSayLC+XyGNB7GrKowpGEQEQ7Hj1FQmV35XkrdI5J6K4ORgzKWnPuvpWBZlo2CzG0jE06zzKVljIHp7xMHEGUzddclhZvL+FAURWxQuc2p7UpIg+H3RARS8xOnkDsrFet0Oj1MHF3Xoa7rSQNKSJVJDYJlj7X7kXJhwukReglzxDe35hv4pCYDpQ7ovV9UkiU1WSMvnz+fz+j7flZAVpsTuGZfNogkI7c13ZFnSac4n8+zNx/GKnG+zbBZpJIn8cxRYQ282L7vV7+3Rnxze3jgml+7VMhJJfh8EULAvfN+4pard9m7pbIEbr6lkkivfFrrSdml41preO/jeWQNjxDfENHQdR2MMcjzPJ6x58hmWTYifW+XGNLeH8GiASXY9H0/OVpKyWOSMqtsYo/Wfl3XiyqS4ulSkcdUdtA5iy6K4lpK9WXVhFjnT6fTw6SfJb7p+x5t2w5930PeTxl8XAVurvn5cdc5eRefIQ0snw7vYfRL13a7ndxw5s7oAGJ/SC94pBl/K/HtdjvJ+hxZWefyUHa7U36Lw3eJAzfyTEj+LMefZXPKDHddh6Zpni6P30V8DoNS17aRv0ECz/9Aeg+/AJ1JUfYZAGUNAAAAAElFTkSuQmCC",
+  "t32":"iVBORw0KGgoAAAANSUhEUgAAACYAAAAkCAYAAADl9UilAAAFTUlEQVR4nK2YL3TjOBDGf7lnYCBgIGBgEGBgEBBgEBBwICAgoKCgIKCgoKCgYEHBgYIDBxYULCwoKCgoWFBQULAgoCDAICAgICDAwMBAwMDv6YAcx/njJLvNvOcXWRprPs18M5ICpxPtnvv6VJP9daqJAGJ/drK5TgoM96Sz/ZFoEUptvaBlz6sNnwjlyUJbGpY9b6/RTZE9T1sv9TwTodw59js2SnDcbRtyz/3dgAdo6wXNJVtjIpSaO+Pl6jy7dJeyj2MN/isIfbcKmZqnJIPF2kplz9NIyGPAXfeCCKVWvQRiUOOkIXue5g4d+zN4olFvvF40A0AWxhceSbgoB612/Yf5uwGIC+JZIppOmbHiQ2I7NgDJx+LPgIlQotxk1SNXBq1KBnbCDgCf408DLAYioA3EhdJktUhckGNvL7C9oVTjBHsq1ntj8+TxqmsJaCkl6CK0ALQKoK7x2j5QsN9jVdG2L8i6yhhagmqb9t6wRhWAy2//O2z36AKbBWq1+jaQYMJ1QKx2BdAR+r8DTDuOY1qV8NFi5YVD4lKGcTNrvwKMTObrHfFuvYNSeC7xFgdVN2OtZc/DKtI5zmY4I4f0LDWhW2blEtyyvZGlVcnfi0abMnGWAF3lk6cZsF06GrLnacuxicXMfDCpjLZWxM6fC2AJOCMHgPQ6LVWt9p6ysQt0ZTFlhsfgzgzYuuzQDMAaVj6M2PYalYW06rMzfy4ayzqWGH059sjSDDVOtnAcrvy94u2jMlIplJveqA1plZfVkNaUjr3kF7EsJ3JGThnCNdlIhDzeVqkDJcdere2j61jaTVcvy10q3vitAMljQ/z8fYdewsEyU8sxEUpUL+E8Ml5rjhKc3MIJPKIgI1ooxr5aN1DN2AkrGlT2SxFL1DDBcg14+bZ7z9wFTItQ0p8m9HLB8MYvB55/mBPC8Mbn6SPlpj9fLxtVKZLCGhbb0gSCyKGVpjSBeVfy6iamjERsHYGqL9r2BYNY0c4tzgYWAPNE8HOc8Go5BNKmG8dm0n5Sv8UUJSXtptAD594BwCflKhOFSkZq5SVAuVj3XJVjjWymGq8K5lbO6M1i9Gbxd+jRzA3IaZLxaDn8yk0BxgUxkYYz1QfDyabbgtjUOysUzHAYW6o06OeCe6GYKHsrnNbGWnXHdwkXaq3z9qbFLTCfT7mKHD6LA2P3qkP0MYO3bUqIUGrvQTB/Az5AThXDTK2ZXNJkSZGq7OTYuYB2biGx8TrGO4tPs3XMLMVTZ3WavU6veZ297SSwCKXOviXksTnJqnHSCDxHO7bNYJEQWTkL1yXNMqaLtJZjdaI7vsvlhhfB8OSfLG9wiRYTk8VWG5zH3ZkmQqnVsIj17dFnwXpggefoju/qnjDtnVqX7L1nSik1D+bmdYzRP0GtuQTaq/BUB4Mg0M1mk0SN8L0BAFEUMZ1Of8vWJvn3AgqCAM9ShGkIcQDelJ9qqpdGewJ9dXbGIo4J5jb+/T3J+zuTn2+MBXrkOFtcqpOjz/yDdpNWs410HMTLK2AS4buiEXiOvmi26f17T3p/TuvyO95wSHYXrmXch6V4VcfZPMZjOggCHGFBECAefpQDfi44F0qTpgi/CZjs7d83YTQCWNs5hkAnaetvT0+nuYx4lqLth9ij9Wua17Hp5aaSe64LUWQGul2yNN051+3jIxcXFwcT4CiOqSxnZtt44xFgl6D6T2MWcczb9QUPv34BIANJdHNDOpkgoggHys0/EU3cH99Ja0CfSnQQBLrju/pcoL8J9Mvdnc7zXOd5rvv9/pf+gvpykauAZHnN+/z8/PK8/wNzvlxSfit3aAAAAABJRU5ErkJggg==",
+  "t33":"iVBORw0KGgoAAAANSUhEUgAAABcAAAASCAYAAACw50UTAAACdklEQVR4nI2VEXjrUBTHf91XuHAhEAgEAhcLhUCh8KBQGAwGxcFgMBg8eDAcDAeFh4NBoVAYDB4MAoVCIDC4EAhcCAQCF/J9fZClbdZ07/3lft+5Ob9z7rn3nPT4XttwLAmkwHH6jIYOOrXkhSXOSjZR2fvOuWtzK5TkbuIyu/AYjJ2TzklUsFgZ5puScpMfsb4atpdTl/s71YaKKeADF8Ac7FvLKdeC+8c1L5sSq/enOYRvr2cet1dBd7ZiWq9fwId6nqdc//rYMc8acDiWnE88PM/r9rRvO3ASFdxcx7wuTCv7dVxwOXW3LbhQkptzn8AXJ7M61MOT5nmZc3mTkOu9z/MyJ0kqZFgHOAMYfCabZhZjTMvhXzKmzt5VFuVJtCmZqf4+80AKdGpbTklUkERFJ3CxDLmYOISB27qfn7cew5FgNKxtvXAst0NfMho6uK4g8AVVGWDdGyr7AfYVWUl8ZXEch75rOgPmWmCMIc0ss0eN1WWvB9AVAGAwiY4gWmtyYxg47wgnBaAo9ifMtKAvU4bTda/fGF2nq84r6re9l1IKpRQw3tlc/yB4ERHfXQGfNS/TPnnRrjlAnrx0luCksowkXrPS6R7+kRUURVXPjdySZnUgYwxl8vD/bGMwyzf+lHVzNk1EklSt7JsAlpi0Oq79oayu0FqzXq2I4vedvdX+4VjSXCxA+LkCOM4TfhgeQYUwZMbwe7VCzx9ZlnTOlqMArltfcvN6Cq7wgh+7j3NjyIuCxWJB/rrYleMUHGCrJAzHLiqQqKAGN4H65YDS+MRAmqakm3dyY9DlMeu7Yb8VSjLw6g5WgWxtNj+MxNAas4f6C7B+G4a0pnoXAAAAAElFTkSuQmCC",
+  "t45":"iVBORw0KGgoAAAANSUhEUgAAACMAAAAhCAYAAABTERJSAAAFOElEQVR4nLWYL3TiShSHP96JiBgxYkTFiIiICAQiIqIiAlGBQKxYEfFERUXFiooVFStWVDyBWFGxomLFCgSiAoFAVCAQiApEREQEIiJiRETOmScoUEqW/nnn3XM4JJPMnY/fvXNzQ4uPmfUFdAAPkLWDwqWgYuTWzEtaH3H6kUnWF/B37dDvOY03PNw7XFTm3b7/+gAM3tN3VojG6zpyP+L2YzBlsyB7Fkrs/w1jfQH9ap0jnjKNN3nKcF4JPon3Ab01rtYXcFULTnv1/sJeQNH+gnockGXLvWtZIfjhhkzTB6r09Rx6C4wNJXzrqD0lPC/AvRyB1rs785zqR38PSlxNmS6XXHy/fBXotTDZUMJ5dZioByAAWuPezPG8YDe2XJIkCTeX319Z6g05E9eHY6J3ewjyEvSFXV5eEsfx0Rw6BmNDuS5oz22anqCT5JhP0Bov+Q1AXpbb4X6/f3TaUWW8GkpnLU0+q8gKgScNaZo23l+lNUmScH19jdvr4XkBWkry+ZwkSQg7HUSo/qjOqxVD1g4FFYpdIUsvTkn7Z7RlFx3H25D9HN8ymUwoy5IoiuhdjtBac319zXA45OzsDG0US4rGtf6U3TbQkqQw25I/uq+3QDo6rDGeF+D2BswWCxZ3AxZpRnR+RrfzGYDJ4jfjn2Ni3+MuyxqfX00w9lzAl7OdEg/3++o0wbzFskKQzyp05NKbFgdrN+aMfHY8GFfMHbPNneeOP2r5rGocb4TJni04Bcqn84LqqLNjtlEFYOg0q9oE0xoa+DKu8JThqhYMDa2pA5lT7wFlhXi3QgUVn+rmOY05syn/v+qAufEBkFICEAYV7dkYZ1nstQpNObQBzWcVBRX3nZCiWlfn3AwPHg8vt7aVOsYNP/ND1ygl8YuS9GGOKwOErjFK4ix/bRfZAL1UaB2SNcQvJVhxiqo8TrzoiRRS7vbmPIexUsco5QFgcgeTG9LHCat01MqzmdVeRCUzUsfsKvOsQVvW4Vg4NUNDi7zElSt7Eq63+SqbceJFSCntfDrYqrOnjOvK7bHQNenDnFU6agFU5bKVLpZcucLqSHE3L5BAyWF4PN9DLQuGZhcGV5xsQTYhd2WwN28L48oAIeR2gq9Don4X/zS0JneYTwdU5bIFEIeab4uisXCFEjvtSqbSwNTg+sJq8Wnr9znE5nxje86kjq1Sz+L6zNLHMat01PIFdhAq4lDTv10wMYdAXYEdPBXN9rBqAbi+sG4VopRHUWQIUgq33Evio82O1tq6qguwB7jKZqSLuxbABs5Thm/jap0jDWrddffhmuzogzLPc1x3CIUmz2ag8oPtmBpa+ayyXm9XHF9a+VS81zvuzwXzPe829tZd98D9cUX6QgGttW232yiTo5XPrCyZ5fM39b4be8NLB9b1BZ6jmXY6ZJ5H2MvI5/d2s5DUsb266jMvFdnCcH0TIxYr8ps7jF/aksmboF7tgTcgcbeHVJrheMV86bLZIUop6/sdwk6HbGFILiN83+fh4ZETL8JvnxG2/0Hq4y3nW2DwHI1UbaRwmDzsN0VSx7Z226i2vx1rB5rZqgTWtWrzaYefubi4OAp0LEw2CALibo90JRiOM2C3q6pySVHARRIhOm2+DpZMh+fcP+bc/rwHQCkJQBBovn465fT09OgPP5ozxhioDVm6r8j45m9yMvr9Pj8mP9GjEQBJMiXLa5ZZgevKXRH1PcRqcRTkv5h1fWFdGVipY3vi923y7Zet69rWdW2jKHr3ezZ87C+Rl1A4cl3QzPywlXyP/QuQrlbkJmndfgAAAABJRU5ErkJggg==",
+  "t6_fixed":"iVBORw0KGgoAAAANSUhEUgAAADQAAAA0CAYAAADFeBvrAAAEL0lEQVR4nM2av44jIQzGv5woKChcpMgD5P2faIsrUmyRYgoKCqS5YmPW4+HvDNm9TzopOyDwD4MxcBe8X6v4fXl3Z3/e3H4OZs1VnKXeEWMjdP11oI0hEVECD9eI8OG7+ump9CMwDGCMAQBYa+GcS+V/46MLyjTKSzBTVIMgovQNACgQHuGxPh6Pqi2lwhxIySOHPKVhgG8gDSMVQgAAfHx84Pl87vrNeagXhr91wZQAABS9IsUgy7LAew9PAXju+2lNuZK6vHIWgqVhQgiw3iBk6taApKdkyC16RUYmuS5qABKEDde/JUiMEQDgvc8a3RrlbFDIGT5qPBFhWZZkuPQCGywB+FuMsWpzc8q9DF6JKDUuIUZBWGy4tXbjDTa8Ys9ag2oCyb3AGLMznkVEG8M1BEMC3zBacmoB2HmnR4eCgvSEtXYzymnfEADSYCntGSkJM6JqULB3BzzLG5/0wu12a3bG6wZAce2cVdVD9rkv9t4nKGtt8kSPR7RG1k6vqtl2rgO5k7NBRAQYt/2HPGROEpzblIFnBLTmoUuMcQW+5rOObNoYum6DxDfU3uicpNFH1w/QWEO1EeZgkOpEnyC0GEbvO3LP4W8aZnQa1qbcRY5qjBEhBHjvk2HSqGVZvqC0jNusM725smoRb0TVoGCMSUGAp5zsOOtB7SkBmRuI0r7DZbvmz2QKMcaLMWZtQX1+fqqRr7X6Xg1trHIEc56qLfyf8A7QeZYxxqzAPt15lW0OZqX0h2GAfQL6MnbT7lGgo+ch2cluQet9ipWLatyG1FEYYODonPOSzBpedYrJa87YkSR0OhCAlYNCyVhgC6UlPZbbPM/CAOOXG6vMGEpgpayiBqHbUpnD24AABZUz5qyOwgCTgFgMpteWVq78TCCQOnqBWITS0kGkV0dggHM3ot1QozoKA8y54p0GdgaENeM55XLm/MKaAQPMex+6xBjhnBs6nBERXtdj0x4DZr4qpAOh3ly995uAIDN3ay2edul+/2lp1qouwvA3eVGp5RaLgPMXJEDngxeP5tGpYe9u5RskGcadc9lENXe9HELIPp9otdbQJn+Td9q9kjC1aFh7feBye3fN/mtAKxHBObcZ1VEoCdMymutJyYT2GqgJVQJKa0IuYF7cfJSoyd7dKt+HemBql/usFlQOKMHcbjc452CthTFGn32qUHqa6cOezuXkiRaoQ7mlPP00UNeZh8tL0y/3csdGS/ERXF70555Xsv0XoHYe4immoxF7if/m6aehatNM701aORDdhqzjlr0XN0B8D9faFPVvnn4aThvY+luXlWDk9+v1uumz+3+SyEvFUvgtvZeW1FvfU+jOJN6S/49c6/aul95MottDcv286xzUUk+m0GPZFJizR4ze0+5QLgfMvxAZ0ZRn/dEOf1vDHvpNTbusb+i/ulP4B9jO2pl5hMAlAAAAAElFTkSuQmCC",
+  "t6_movable":"iVBORw0KGgoAAAANSUhEUgAAADIAAAAwCAYAAABT9ym6AAAE3UlEQVR4nL2aL7OrOBjGf+xERCAiEIiKioqKK66oOOKKI/ZDrNiPdz/GlVccccSKI1ZUVCAQCEQE4p1hBQ0NKaEU6D4znemQNDzP+zeEJrwWrfc9eeWN/njh2mMi2rGJW2COldzNw7ntzN8/DWNML7jJhOZsH97n0YT/RYQjrpQCQGtNmqb9+EWKh2LUxFhMxCaYIm+M6a8BmMZQNEVbFEWUy9jAmICYBxZ5JhQBNyGhCB9N0wBwPp+pqmpw39Ajc0W4a7NExIgDUS+MCajrGmst1jRQDedMhVYMs7ywlrxDKKJpGrRVNMG8mBDfM37pjHrBrzR+3E8R9wU4wuF3X4CIAGCtvbv/lGVHk32M8LOkjTHUdd0T9q3uiPrE3TURifKdDK0r0dYY0y/qk39WgIMjrLUeWN8RnuDTxsRMCvFruVLqjrSDMWZAOCTvxMFNRAg/hIA7bzzC08nuW15rPbBqX/c94j5RH6EnfPgi5iKa7PqQQhVvWL7V8zx/eCOXF0A0N9Yg6hFd3Q9Za3sxWuve8nM8EOKZ3JiD6O53bGG/8zoixhhQ6fDDuLgx+ILdmn5BmSsw5pFERFro4jWsVCEJkw2T/ybmnuwYfLJL8gMmcmTKoi7J+zlie/IhnIiwb/g9w10LRTwTbrHQSnwrighN02Ct7Qn5ZOq67sSEUOkgj8Km6DBVweYimuxKqT65XWj5Nxz1WOgZT9yYAWJ9w43dLb+ks4tIopRqH4kpyzKwdGzF12J2Q/QtNuaZqYR+tTdgxnZcKdXC/bbkOjZ4IIptU5wIJ+oVQpY8j/iL3yVq2GccxqqUW8PHEhEw8wlvzCt+l7/OiW4qx0g+szncTAjQumSPkYShmBC+h8aa3hoR8NzBQet3+Jig2C5giny4VtDpNxcCgZgxEmuxRARsIMTBCQpzJ8TY+NIE97Hk8C0qJkRYHObiWRGw/BRxtphnsUQErD8O3UzQUgEOa14rtEqpxc8PPk77bPUaq0LrcDiQ5zmqOgPw66uIlt8Q78ecuigwux0A/9YwdUj9CKte9PgiLpcCuifLZK+F0z5DRJLvqfB+zBGRRESS92POX29HLpeCWsA2nUd3ep1nFwlRSg1OTmwjnO3Nu2dLIlXJIaVVWWf5Q0r7949vLcDP31/J2ZIYBVKVqwT0nJb+ME3T3hsAJ9MdsdbSCakFsqtYleXsteLjn6+B4FrAXBmkWk2eJL5MiLUWq4VUK6qys6pRHfnMe1eod0fKsoSmpjE7dobBCxuVPT4Tm4PNmsHZkhxS2sulQkSSt0PeQvdSBsBo0HWBUbC7jm2JTYQYBYe080Ke5xxdmBUFu6vFq7K8hVXdefBkuhxyWNNLFletsrwlqSOz3+943xvqouDXVxc+UpV8nMskC45VXSFIdWdLV72WYlX5LZrrM4pW7PddP/j5+yv5rDvLm92O+sqvKkvevJDK8psIf62lWLMt6Lcnp31GqhW2ET7O5WDNP7/tWucduFU33xvA6G+fwSb/fPA944jCLW98fNYkoQiAz0sVTn0Ka/yZiEirlCK3BZgutFSWQ30LI+eNk6F12xEfl0sx6C2LyaxdgGuIfU+FkKhL4ND6buzzWqo34LDpvxr6nPmeyl0O+LCNDMvxBnjF3zNatxfLbdFfrAUujdrMAyH+A3cgA17cIy2IAAAAAElFTkSuQmCC",
+  "t7":"iVBORw0KGgoAAAANSUhEUgAAABEAAAANCAYAAABPeYUaAAAAyUlEQVR4nKWTMY7EMAhFv0cUFBQUW1CkyP3PlQOkoKBAyjaDZceZkVb7msiGPINJGlYuIoKILAF3R2a2+/640V8uwbZtPXgcRxfdZfQkEBGYGcysS5gZETHKrhK9KmksX1VhZtj3HfqzQVXBzEte8QIAIloCAHB6Tmtmhqp2ERFdYzur4DyndUT0dtx9ii0Sd+99R8T0vIuLNpZVjBcqItPJNZ0iM9uj5OnyRslIl+A94r+yjPg/lKRl5tfET1UA82dffG3t6d/5BeiLZuMMjCR8AAAAAElFTkSuQmCC",
+  "t8":"iVBORw0KGgoAAAANSUhEUgAAACgAAAATCAYAAADiQ08DAAACZ0lEQVR4nLWWr5PiMBTHv71ZUYE4WXHiCUQEArHiyRMIBOJkZMWKk/wpyBMnKitXICoQkRErEIiKiogT/QMQiJ3JiZJsKFCycPedYaYp6XufeT/ykqAnZrZEBCICM2OxWPS3eK3Xa2itYYyBMQZa6+Tq5js1ZNAys184aCcH5XQDzs5GwI8x4fu4PflDNRleG4PN/jLL0xB9H46ZIYRAXdcnoLfAVvMUROL46itqFhC6s5ETkM+mMKa2y+pwBnorJT6KRAQpJYQQqKrKpxa4Gj37MgJWP6cAgJo7wMlz6jfs3g4e1Gn5a4vfAeSXG4CJ1tovXPTato2CW87Tk5eT5xRP3xb+N3lOPbgHnKd4GcHGAnq5+gtr71rdzS7A9fX+Z43d2+HknTG1h5wdIaNqEACUUsiyDESEMKqXRD2nRF3NvWtgxx9QLr0OzPtqMhAMYgETrbVlZrRt6xtmqDmmY4Jq4Ds2BEiD50sWVJN5G9ia+BR3jjqTWZZF7VdN5h1+du+26XxFp9h1sTEGZVkOnnvO+HRM3nmM3HfAR3SjAY+TIip63k3gMNpPbx1GwTIzpJTQWqMsy7vGFjPb0W64iWK12SM5iWA4yj6jcH7neQ4hBGajx+GAXoqNMQjnb4xWq5Wdz+d+XVXVY2Q9ndVg27auGexQIzCzlVKCiFAUBZRSfl4DSDb7bg7fo3Aeh4CJ1toC3TFSFAWKorBKqbOOlVJaZgYRoSxLX6/HA9yNqbsg+5eFwS7O89xFxALdLAa6NF46apjZ9por2ez981XYa1ctIPI241LXvw8+0u3/S5aZ7e1t/05/AYfhNuUu7aiyAAAAAElFTkSuQmCC",
+  "t9":"iVBORw0KGgoAAAANSUhEUgAAABgAAAAqCAYAAACpxZteAAAE7ElEQVR4nJWXrXfjOBTFf51jICAgYCBgYGBgUBAwIKAgoMCgIKBgwYKCAQUFA/aPGFi4YMGAAQMGFBQEDAgIMCgwKDAwEDAQMBAwEMg5XuDEdZqvjkhyYuned+/Te3654OOrE4kEwFftxUcPfWRj9/lKcn0ZkmWXKNFgas+PXzW/Fs3Z88E5cJFI7m8iwlAAYGoPQDYLAbpzJOcIiH3AYtmQxJJEaNA9QWX8uaMfIzBizaS9JPQJzgNO0zjHqymw8jzJeQVBxMPtLZM4BqAwhlc8d9k3Hh8feVn9e/L8Kf+66XTKz/t7ojiGDUEvy1BpTVmWzOfzkzjHFHQikXydzXZAx6tZLHBKkaYpkzDsfq5WB0mOWjTXEwBq5wbwUCka5wB6y4xhnqbczGbYIOiWy+Ueyckc1NYOn5HWPdkGvHGOvCgIleJ5ucRu9n6YoG1rGhcCEGm986wwhrwoqITAvb7StjVlaQ5a9OmUglOKGq1RSuGkpGrc0TPHCC6eC8NTWfJSVQOwT9M9RXEco6L0KMHJHJh1zdfbO748/APAdPO7r9ZU+U8WiwWx94T+sP+nCLosy8iyjFmW7T0UScCUKWVZYlYrKi/+iKATiWRLsFgsUEqRxDHhyJrGWtKNZaxWmER2h9r4e4JOJJK77J6H+ZwfyyV5nhNvqnhbAwDOuV6BMTgpiYMIk9R7JHsKInlLdn01gMRxzE2WDdEL5yisxW3InHOs5RSpU1RtcMnvHZLxLepEIrmeCkKlqHzfKQcbNstv2oNS6i2AK9UHF8UorhGJ7Lb7x3I6oVLm2YRmneIaR7Cu+ev2ijiOCZUabNraUxQFaznFjerAOUfbOmz1dDEm6IRKEVIjhEJKxfVVyNeHLyRJ0u+oa3JjeCkK8jzHGINpNFKqHYVt63BNiXflxcEcvG3yfP/+fbBj2+istVhraXyKlPvnAITUeFdykMB7hxCKoiiw1mKMQSnFTCkirbnRGpem1Lk/CO692/n9E4BSuzIB3DrtO2Rdk3hPpDXRZt/faUqi36r3Pbhv356dbHZrMR2+19ZSO9d/Wsv1uw77fimlurMEfXT1ToGNG10o26PnnHMXA8G2aMbSenBH5QWmaYbId6KU7Ul7YJRkgcWjh81CqD6SdUrRlAejnAhBPkrqFrzH6tdOHUB/xQbSTU2EsiXGEofhUHAAcpIilMa7HtjYnmzZ97A3i4CL7b31rd2TuQ4iquAzyybgpaoAuJ3N+DKZkjjHl8mUtigJrWUCzEZ52qmDrU3bio6iGAAVKlzjcM0rD/f3/RAQx/xaLPphwBj+y3NoLUasd6bvQy/qvbYxrpO6NjzevjXASGuel0tuZjOel0u+PT3tYL4n6JRSICdHwe8uYZKmFGXJJE15Wq0w6zVxEPBki73/DsdGvkFFGMYDybZTqqBkEvYjTdvWADwXh8eWk7Pp2KptPrY1E/gcs+7BT/3jOTVVXHhXdtBf11CUxMklSmq01lirMcZQFAUlh+vkHEEnEsk00kyn6fBmc5uW7Ubt49Q6noNEMv980/sfSJQMNpFb8jynKIpDJB8afjuRSGbJFSqMUDLAGMPyd0FZHrfiTxR0IunHEFqLbfmwHYfwDuYgDiK01ggRMxnVgdu88JVSO1fXOUfRvOKr/fZ9NMl+M7aM535rLbVsuHTJ8Nx7f1Lh/1P+okLfHPVrAAAAAElFTkSuQmCC",
+  "t14_white":"iVBORw0KGgoAAAANSUhEUgAAABcAAAAVCAYAAACt4nWrAAACXElEQVR4nJWVIXfbMBSFv+wYCAgIBBgYBAgYBAQUGBgYDBYUFAYMDAQEDhYOBAwUFA4MFvQHDAYEGAQUDBgYBAQIBAgICPgcDWR14yROs3uOgXXl++57ek8e0I8gtARg6BUANvYANNa3m3ztBn0CfURI05S7uzsA4jjGGEOapiil2k3WWgCqqmKxWJxoRX1RlVJYa9uHSJ6IfoRe8T0rUYqO2//Bp0ukkhFEEuuadu1a1x+KHwodBrgWF8uSpikAxpg2mDHmJJDdbc9+39stQktGUYJzDoAkSbhPU4ytWJl9oDduJ+zZluxzPvC1Cxu9Jf93mJMYlDIYC9JtoWnYCHexz/tqHqb5mKfbnFgpttbxWr+n7vy+LLlQTPNxSJIknBM5dh6EltzHIwC+Pv4+dNUKWO+ptnYAILQNEyGJcxnWq24WJ84X8+88/HyhbuQxdRa+doOyNoPP+ZzZ/Fsng4640BKlFFVV8WOxYDabnaQbq7TzXhRFKIoiWNeQ6qTDdcR97Xh+fmaz2TCM45PJrDYWY6vOWrldk45vSHVCWZYd7vikg9CSQud471kuly2f6Tg0sUNZhVWWw/oKLUOW3LB2f3DrXW/39CFM83EQWoZMxyHT8dnuOMalKEFoyXw85teqZigalBC84pBWoLXGWktVVb0afUMUiqJACMHKWJqmYecjHBFfbqdYa8myDGMMjy9PoW+Qei+ucrtmNBqhlCKK9h6SJGmFy7JkFCse5w9kWXbVELUY+vefxXA4RCmFEAI1TNqLzCOA/vv+2pMNWZYxmUwAWC6XF2v9hr806RIoSROIBQAAAABJRU5ErkJggg==",
+};
+// Real sprites extracted from the game's own object .SPR files (not
+// level-specific — a separate global catalog: FLAG.SPR, TIMMY.SPR, etc),
+// decoded with the SAME row-centering convention already verified correct
+// for .G2 level bricks (each row centered by its own pixel count within the
+// frame width — NOT skip used as a literal left offset, which produces
+// scrambled-looking results for anything non-trivial, exactly what looked
+// so wrong in the first sprite reference sheet). Palette is a best-guess
+// (JACKS.PAL) since these files carry no palette of their own — colors may
+// still be slightly off, but shapes should now be correct.
+// Some are hand-composited from multiple frames (t6 cannon = barrel+base/
+// wheel, t13 exit = dome+pole+base, t15 pie = base+candle/ball) since the
+// real object is built from several .SPR pieces placed together in-game.
+const objSpriteImg={};
+for(const key of Object.keys(OBJECT_SPRITE_B64)){
+  const img=new Image();
+  img.src='data:image/png;base64,'+OBJECT_SPRITE_B64[key];
+  objSpriteImg[key]=img;
+}
+// type (+ relevant raw field) -> sprite key. Returns null if we don't have
+// a real sprite for this type yet (caller falls back to the procedural icon).
+function spriteKeyFor(o){
+  switch(o.type){
+    case 0: return o.raw[10]===2 ? 't0_metal' : 't0_wood';
+    case 1: return 't1';
+    case 2: case 3: case 4: case 5: return 't2';
+    case 6: return o.raw[10]===2 ? 't6_movable' : 't6_fixed';
+    case 7: return 't7';
+    case 8: return 't8';
+    case 9: return 't9';
+    case 13: return 't13';
+    case 14: return o.raw[11]===2 ? 't14_white' : 't14';
+    case 15: return o.raw[8]===1 ? 't15_candle' : 't15_ball';
+    case 17: return 't17';
+    case 18: return 't18';
+    case 22: return 't22';
+    case 24: return 't24';
+    case 44: return 't44';
+    case 46: return 't46';
+    case 35: return 't35';
+    case 36: return 't36';
+    case 37: return 't37';
+    case 38: return 't38';
+    case 39: return 't39';
+    case 40: return 't40';
+    case 41: return 't41';
+    case 42: return 't42';
+    case 43: return 't43';
+    case 27: return 't27';
+    case 28: return 't28';
+    case 29: return 't29';
+    case 30: return 't30';
+    case 31: return 't31';
+    case 32: return 't32';
+    case 33: return 't33';
+    case 45: return 't45';
+    default: return null;
+  }
+}
+
+const OB_ICON_TYPES = new Set([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,17,18,22,23,24,27,28,29,30,31,32,33,35,36,37,38,39,40,41,42,43,44,45,46]);
+const PLAYER_ACCENT = {2:'#c0392b',3:'#2b7fc0',4:'#c0a02b',5:'#7a2bc0'}; // t2..t5 = player 1..4 checkpoint tint
+const COOP_SPAWN_ACCENT = {10:'#2b7fc0',11:'#c0a02b',12:'#7a2bc0'}; // t10..t12 = player 2..4 start (mirrors t9=player1)
+function drawObjIcon(ctx, o){
+  const {x,y,type,raw}=o;
+  const spriteKey=spriteKeyFor(o);
+  if(spriteKey){
+    const img=objSpriteImg[spriteKey];
+    if(img && img.complete && img.naturalWidth>0){
+      // Native size, no scaling — this is literally the game's own pixel
+      // data, drawn 1:1 so what you see here is what it'll look like in-game
+      // (aside from possible palette-color inaccuracy — see note above).
+      ctx.drawImage(img, x-img.naturalWidth/2, y-img.naturalHeight/2);
+      return;
+    }
+    // image still loading (first paint after page load) — draw nothing this
+    // frame rather than a misleading placeholder; renderLevel() is cheap
+    // enough that the next redraw (triggered by img.onload below) will show it.
+    if(img && !img._retryHooked){
+      img._retryHooked=true;
+      img.onload=()=>renderLevel();
+    }
+    return;
+  }
+  ctx.save();
+  ctx.translate(x,y);
+  switch(type){
+    case 10:case 11:case 12:{ // co-op player 2/3/4 start (same glyph style as Jack's own start marker)
+      const col=COOP_SPAWN_ACCENT[type];
+      ctx.strokeStyle=col;ctx.lineWidth=3;
+      ctx.beginPath();ctx.arc(0,0,9,0,Math.PI*2);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(-13,0);ctx.lineTo(13,0);ctx.moveTo(0,-13);ctx.lineTo(0,13);ctx.stroke();
+      break;}
+    case 0:{ // swing: beam on a pivot; field10: 1=wood,2=metal
+      const metal = raw[10]===2;
+      ctx.strokeStyle = metal?'#b0b8c0':'#8a5a2b';
+      ctx.fillStyle = metal?'#8d97a0':'#6b4423';
+      ctx.lineWidth=3;
+      ctx.beginPath();ctx.moveTo(-12,-2);ctx.lineTo(12,2);ctx.stroke(); // beam
+      ctx.beginPath();ctx.moveTo(0,-2);ctx.lineTo(-5,8);ctx.lineTo(5,8);ctx.closePath();ctx.fill(); // pivot triangle
+      break;}
+    case 1:{ // weight/gira
+      ctx.strokeStyle='#9aa0a6';ctx.fillStyle='#5a5f66';ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(0,2,7,0,Math.PI*2);ctx.fill();ctx.stroke();
+      ctx.beginPath();ctx.arc(0,-6,3,Math.PI,0);ctx.stroke(); // handle loop
+      break;}
+    case 2:case 3:case 4:case 5:{ // checkpoint / hammer-return, one per co-op player (2=p1..5=p4)
+      ctx.fillStyle='#e8e2d0';
+      ctx.fillRect(-4,-10,8,20);
+      ctx.strokeStyle=PLAYER_ACCENT[type];ctx.lineWidth=2;
+      for(let i=-10;i<10;i+=6){ctx.beginPath();ctx.moveTo(-4,i);ctx.lineTo(4,i+4);ctx.stroke();}
+      ctx.strokeStyle='#333';ctx.strokeRect(-4,-10,8,20);
+      break;}
+    case 6:{ // cannon: 1=standing,2=on wheel
+      const wheeled = raw[10]===2;
+      ctx.fillStyle='#555';ctx.strokeStyle='#222';ctx.lineWidth=1.5;
+      ctx.save();ctx.rotate(-0.5);ctx.fillRect(-4,-13,8,16);ctx.strokeRect(-4,-13,8,16);ctx.restore();
+      ctx.fillRect(-7,2,14,6);ctx.strokeRect(-7,2,14,6); // base
+      if(wheeled){ ctx.beginPath();ctx.arc(0,11,4,0,Math.PI*2);ctx.fillStyle='#333';ctx.fill(); }
+      break;}
+    case 7:{ // cannonball: field8: 2=big(default),1=small
+      const big = raw[8]!==1;
+      ctx.fillStyle='#2b2b2b';ctx.strokeStyle='#000';ctx.lineWidth=1;
+      ctx.beginPath();ctx.arc(0,0,big?7:4,0,Math.PI*2);ctx.fill();ctx.stroke();
+      break;}
+    case 8:{ // bag of cannonballs (approximate — exact sprite not yet identified)
+      ctx.fillStyle='#7a5a3a';ctx.strokeStyle='#4a3520';ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.ellipse(0,2,9,8,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+      ctx.beginPath();ctx.moveTo(-3,-6);ctx.lineTo(3,-6);ctx.lineTo(0,-11);ctx.closePath();ctx.fill(); // tied neck
+      ctx.fillStyle='#2b2b2b';
+      [[-3,1],[3,2],[0,5]].forEach(([dx,dy])=>{ctx.beginPath();ctx.arc(dx,dy,2,0,Math.PI*2);ctx.fill();});
+      break;}
+    case 13:{ // exit door
+      ctx.fillStyle='#2f8f4e';ctx.strokeStyle='#1b5c30';ctx.lineWidth=2;
+      ctx.fillRect(-7,-12,14,24);ctx.strokeRect(-7,-12,14,24);
+      ctx.fillStyle='#eaffea';
+      ctx.beginPath();ctx.moveTo(-2,0);ctx.lineTo(5,0);ctx.moveTo(1,-4);ctx.lineTo(5,0);ctx.lineTo(1,4);ctx.stroke();
+      break;}
+    case 14:case 17:{ // small hammer (14) / big golden hammer (17)
+      const big = type===17;
+      const headColor = big?'#d4af37':'#8a8a8a';
+      ctx.strokeStyle='#6b4423';ctx.lineWidth=big?3:2;
+      ctx.beginPath();ctx.moveTo(0,big?10:6);ctx.lineTo(0,big?-4:-2);ctx.stroke(); // handle
+      ctx.fillStyle=headColor;ctx.strokeStyle='#333';
+      const hw=big?7:4, hh=big?5:3;
+      ctx.fillRect(-hw,-hh-4,hw*2,hh);ctx.strokeRect(-hw,-hh-4,hw*2,hh);
+      break;}
+    case 22:{ // spring
+      ctx.strokeStyle='#9aa0a6';ctx.lineWidth=2;
+      ctx.beginPath();
+      for(let i=0;i<4;i++){ const yy=8-i*5; ctx.moveTo(-6,yy);ctx.lineTo(6,yy-2.5); }
+      ctx.stroke();
+      break;}
+    case 23:{ // forklift
+      ctx.fillStyle='#e0a020';ctx.strokeStyle='#7a5510';ctx.lineWidth=1.5;
+      ctx.fillRect(-8,-4,12,8);ctx.strokeRect(-8,-4,12,8); // body
+      ctx.beginPath();ctx.moveTo(4,-4);ctx.lineTo(4,-10);ctx.stroke(); // mast
+      ctx.beginPath();ctx.moveTo(4,-9);ctx.lineTo(10,-9);ctx.moveTo(4,-3);ctx.lineTo(10,-3);ctx.stroke(); // forks
+      ctx.fillStyle='#222';
+      ctx.beginPath();ctx.arc(-4,5,3,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.arc(3,5,3,0,Math.PI*2);ctx.fill();
+      break;}
+  }
+  ctx.restore();
+}
+
+function renderLevelInner(){
+  const p=state.parsed;
+  if(!p)return;
+  const mw=p.wam.W*8,mh=p.wam.H*8;
+  mapCanvas.width=mw+MARGIN*2;mapCanvas.height=mh+MARGIN*2;
+  const ctx=mapCanvas.getContext('2d');
+  ctx.fillStyle='#0d0f14';ctx.fillRect(0,0,mapCanvas.width,mapCanvas.height);
+  ctx.save();
+  ctx.translate(MARGIN,MARGIN);
+  ctx.strokeStyle='rgba(224,122,48,.5)';ctx.lineWidth=1;ctx.setLineDash([6,4]);
+  ctx.strokeRect(.5,.5,mw-1,mh-1);
+  ctx.setLineDash([]);
+  hitmap=[];
+  p.wam.ents.forEach((e,i)=>{
+    const ie=p.I[i];
+    if(!ie||ie.block>=p.blocks.length)return;
+    const b=p.blocks[ie.block];
+    const flip = state.flip && ie.flip===1;
+    drawBrick(ctx,b,p.pal,e.x,e.y,flip,state.trans);
+    hitmap.push({x:e.x,y:e.y,w:b.w,h:b.h,idx:i});
+  });
+  if(state.grid){
+    ctx.strokeStyle='rgba(224,122,48,.25)';ctx.lineWidth=1;
+    for(let x=0;x<=mw;x+=48){ctx.beginPath();ctx.moveTo(x+.5,0);ctx.lineTo(x+.5,mh);ctx.stroke();}
+    for(let y=8;y<=mh;y+=48){ctx.beginPath();ctx.moveTo(0,y+.5);ctx.lineTo(mw,y+.5);ctx.stroke();}
+  }
+  if(state.col&&p.col.length){
+    ctx.font='9px monospace';ctx.textBaseline='top';
+    for(const h of hitmap){
+      const c=p.col[h.idx+1];if(!c)continue;
+      ctx.fillStyle='rgba(122,182,72,.9)';
+      ctx.fillText(c[1],h.x+2,h.y+2);
+    }
+  }
+  objhit=[];
+  if((state.obj||state.mode==='edit')&&p.ob.objs.length){
+    ctx.font='bold 10px monospace';
+    p.ob.objs.forEach((o,oi)=>{
+      const r=o.isSpawn?9:6;
+      const selected = state.sel&&state.sel.kind==='object'&&state.sel.idx===oi;
+      const col = selected?'#ffd23f':(o.isSpawn?'#7ab648':typeColor(o.type));
+      ctx.strokeStyle=col;ctx.lineWidth=o.isSpawn||selected?3:2;
+      if(OB_ICON_TYPES.has(o.type)){
+        drawObjIcon(ctx,o);
+        if(o.isSpawn||selected){
+          ctx.save();ctx.globalAlpha=0.35;ctx.strokeStyle=col;ctx.lineWidth=2;
+          ctx.strokeRect(o.x-r-3,o.y-r-3,(r+3)*2,(r+3)*2);
+          ctx.restore();
+        }
+      }else{
+        ctx.save();
+        ctx.globalAlpha=0.25;
+        ctx.fillStyle=col;
+        ctx.fillRect(o.x-r,o.y-r,r*2,r*2);
+        ctx.restore();
+        ctx.strokeRect(o.x-r,o.y-r,r*2,r*2);
+      }
+      ctx.fillStyle=col;
+      const label = o.isSpawn?T('JACK START','СТАРТ ДЖЕКА'):(userNames.types[o.type]||('t'+o.type));
+      ctx.fillText(label,o.x+r+4,o.y-4);
+      objhit.push({x:o.x,y:o.y,r:r+4,idx:oi});
+    });
+  }
+  if(state.sel&&state.sel.kind==='brick'){
+    const h=hitmap[state.sel.idx];
+    if(h){ctx.strokeStyle='#ffd23f';ctx.lineWidth=2;ctx.strokeRect(h.x-1,h.y-1,h.w+2,h.h+2);}
+  }
+  ctx.restore();
+  document.getElementById('stName').textContent=levelDisplay[state.key]||'—';
+  document.getElementById('stBricks').textContent=p.wam.ents.length;
+  document.getElementById('stBlocks').textContent=p.blocks.length;
+  document.getElementById('stObjs').textContent=p.ob.objs.length;
+  document.getElementById('mapinfo').innerHTML=
+    `<div class="kv"><span>${T('size','размер')}</span><span>${mw}×${mh} px</span></div>`+
+    `<div class="kv"><span>${T('half-bricks (W×H)','полукирпичи (W×H)')}</span><span>`+
+      `<input type="number" id="wamW" value="${p.wam.W}" style="width:60px">×`+
+      `<input type="number" id="wamH" value="${p.wam.H}" style="width:60px">`+
+      `</span></div>`+
+    `<div class="kv"><span>.G2</span><span>${p.blocks.length} ${T('blocks','блоков')}</span></div>`+
+    `<div class="kv"><span>routine (.G2R)</span><span>${[...new Set(p.g2r)].join(',')||'—'}</span></div>`+
+    (p.ob.broken?`<div class="hint" style="color:var(--bad)">${T(`⚠ .OB contains an object type whose format we haven't fully figured out yet — ${p.ob.objs.length} objects were recognized, the remainder is kept "as is" and won't be lost on export, but isn't shown or editable.`,`⚠ .OB содержит тип объекта, формат которого мы ещё не до конца разгадали — ${p.ob.objs.length} объектов распознано, остаток сохранён "как есть" и не потеряется при экспорте, но не показывается и не редактируется.`)}</div>`:'')+
+    (p.ob.ambiguous?`<div class="hint" style="color:var(--warn,#c80)">${T(`⚠ Object parsing for this level is AMBIGUOUS: given the object-count constraint, several valid record splits exist, and the one shown is just one of them. Types and/or coordinates of some objects may be wrong. Exact record lengths need to be pulled from the engine (descriptor table in G.EXE, see HANDOFF). Edit this level carefully; exporting without changes is safe (bytes are preserved exactly).`,`Разбор объектов этого уровня НЕОДНОЗНАЧЕН: под ограничением по числу объектов существует несколько допустимых разбиений записей, и показанный вариант — лишь один из них. Типы и/или координаты части объектов могут быть неверны. Точные длины записей нужно доставать из движка (таблица дескрипторов в G.EXE, см. HANDOFF). Правки на таком уровне делай осторожно; экспорт без изменений при этом безопасен (байты сохраняются точь-в-точь).`)}</div>`:'')+
+    (p.ob.objs.some(o=>o.cornerSuspicious)?`<div class="hint">${T(`ℹ This level has ${p.ob.objs.filter(o=>o.cornerSuspicious).length} object(s) with coordinates near the origin (|x|<20, |y|<20). Object parsing is now deterministic (each type has a fixed length), so this is NOT a sign of a parsing error — these are just real objects on a compact map (bonus/co-op arenas). Highlighted on the map with a marker in the top-left corner.`,`На этом уровне ${p.ob.objs.filter(o=>o.cornerSuspicious).length} объект(ов) с координатами у начала отсчёта (|x|<20, |y|<20). Разбор объектов теперь детерминированный (у каждого типа фиксированная длина), поэтому это НЕ признак ошибки парсинга — просто реальные объекты на компактной карте (бонус/кооп-арены). Подсвечены на карте маркером в левом верхнем углу.`)}</div>`:'');
+  document.getElementById('wamW').onchange=e=>{p.wam.W=parseInt(e.target.value)||p.wam.W;markDirty('WAM');renderLevel();};
+  document.getElementById('wamH').onchange=e=>{p.wam.H=parseInt(e.target.value)||p.wam.H;markDirty('WAM');renderLevel();};
+  applyTransform();
+  renderSpritePane();
+  renderBgPane();
+  renderSelInfo();
+}
+
+function renderSpritePane(){
+  const pane=document.getElementById('spritepane');
+  const p=state.parsed;
+  if(!p){pane.innerHTML='<div class="hint">'+T('No level loaded.','Уровень не загружен.')+'</div>';return;}
+  if(!p.spr.length){pane.innerHTML='<div class="hint">'+T('The .SPR file for this level is not open (or it has no frames).','Для этого уровня файл .SPR не открыт (или в нём нет кадров).')+'</div>';return;}
+  const box=document.createElement('div');
+  box.className='spr-src';
+  const h3=document.createElement('h3');
+  h3.textContent=`${levelDisplay[state.key]}.SPR — ${p.spr.length} ${T('frames','кадров')}`;
+  box.appendChild(h3);
+  const grid=document.createElement('div');
+  grid.className='spr-grid';
+  p.spr.forEach((f,idx)=>{
+    const cell=document.createElement('div');
+    cell.className='spr-cell';
+    const cv=document.createElement('canvas');
+    const w=Math.max(1,f.bw),h=Math.max(1,f.h);
+    cv.width=w;cv.height=h;
+    const cctx=cv.getContext('2d');
+    const img=cctx.createImageData(w,h);
+    const d=img.data;
+    for(let ry=0;ry<f.rows.length;ry++){
+      const r=f.rows[ry];
+      const cnt=r.px.length;
+      const xstart=Math.floor((w-cnt)/2);
+      for(let rx=0;rx<cnt;rx++){
+        const v=r.px[rx]; if(!v) continue;
+        const o=(ry*w+(xstart+rx))*4; const c=p.pal[v];
+        d[o]=c[0];d[o+1]=c[1];d[o+2]=c[2];d[o+3]=255;
+      }
+    }
+    cctx.putImageData(img,0,0);
+    const scale=Math.max(1,Math.min(4,Math.round(96/Math.max(w,h))));
+    cv.style.width=(w*scale)+'px'; cv.style.height=(h*scale)+'px';
+    cell.appendChild(cv);
+    const lbl=document.createElement('div');
+    lbl.textContent=`#${idx} ${f.w}×${f.h}`+(f.ok?'':' ⚠');
+    cell.appendChild(lbl);
+    grid.appendChild(cell);
+  });
+  box.appendChild(grid);
+  pane.innerHTML='';
+  pane.appendChild(box);
+}
+
+function renderBgPane(){
+  const pane=document.getElementById('bgpane');
+  const p=state.parsed;
+  if(!p){pane.innerHTML='<div class="hint">'+T('No level loaded.','Уровень не загружен.')+'</div>';return;}
+  if(!p.scn){pane.innerHTML='<div class="hint">'+T('The .SCN file for this level is not open.','Для этого уровня файл .SCN не открыт.')+'</div>';return;}
+  const cv=document.createElement('canvas');
+  cv.width=p.scn.w; cv.height=p.scn.h;
+  const ctx=cv.getContext('2d');
+  const img=ctx.createImageData(p.scn.w,p.scn.h);
+  const d=img.data;
+  for(let i=0;i<p.scn.w*p.scn.h;i++){
+    const v=p.scn.data[i]; const c=p.pal[v];
+    d[i*4]=c[0];d[i*4+1]=c[1];d[i*4+2]=c[2];d[i*4+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+  cv.style.imageRendering='pixelated';
+  cv.style.border='1px solid var(--line)';
+  pane.innerHTML='';
+  const info=document.createElement('div');
+  info.className='hint';
+  info.style.marginBottom='10px';
+  info.textContent=`${levelDisplay[state.key]}.SCN — ${p.scn.w}×${p.scn.h}px, ${T('level palette (.PAL)','палитра уровня (.PAL)')}`;
+  pane.appendChild(info);
+  pane.appendChild(cv);
+}
+
+function applyTransform(){
+  mapCanvas.style.transform=`translate(${state.px}px,${state.py}px) scale(${state.zoom})`;
+  document.getElementById('zoomLbl').textContent=Math.round(state.zoom*100)+'%';
+}
+
+function zoomFit(){
+  const p=state.parsed; if(!p)return;
+  const mw=p.wam.W*8,mh=p.wam.H*8;
+  const r=Math.min(vp.clientWidth/mw,vp.clientHeight/mh)*0.92;
+  state.zoom=r;
+  state.px=(vp.clientWidth-mw*r)/2-MARGIN*r;
+  state.py=(vp.clientHeight-mh*r)/2-MARGIN*r;
+  applyTransform();
+}
+
+const levelCache={}; // key -> {parsed, dirty} — preserves edits when switching levels in the dropdown
+
+async function loadSelectedLevel(){
+  const k=document.getElementById('lvlsel').value;
+  if(!k||!levelFiles[k])return;
+  // fully reset all ephemeral/tool state so nothing from a previously
+  // edited level (stale selection, brush pointing at an out-of-range
+  // block index, an in-progress drag, etc.) can leak into the new level
+  state.key=k;
+  state.sel=null;
+  state.drag=null;
+  state.panDrag=null;
+  state.tool='select';
+  state.brushBlock=null;
+  state.brushObjType=null;
+  document.querySelectorAll('.pitem.sel,.otype.sel').forEach(x=>x.classList.remove('sel'));
+  vp.classList.remove('drag','place');
+  document.getElementById('err').textContent='';
+  updateFilesInfo();
+  try{
+    if(levelCache[k]){
+      // level was visited before in this session — restore its edited
+      // state instead of re-reading the original files (switching levels
+      // must never silently discard your edits)
+      state.parsed=levelCache[k].parsed;
+      state.dirty=levelCache[k].dirty;
+    }else{
+      state.parsed=await parseLevel(k);
+      state.dirty={WAM:false,I:false,OB:false,COL:false,G2:false,G2R:false,PAL:false,SCN:false,SPR:false};
+      levelCache[k]={parsed:state.parsed, dirty:state.dirty};
+    }
+    buildBrickPalette();
+    buildObjPalette();
+    autoLoadThemeForLevel(k); // fire-and-forget: fills in the rest of the theme's tileset if a pack file is present
+    updateToolUI();
+    updateExportUI();
+    renderLevel();
+    zoomFit();
+  }catch(e){
+    console.error(e);
+    document.getElementById('err').textContent=T('Error loading level "','Ошибка загрузки уровня "')+k+'": '+e.message+T('\n(open the browser console, F12, for details)','\n(открой консоль браузера, F12, для подробностей)');
+    state.parsed=null;
+  }
+}
+
+function makePitem(b, pal, title, onClick){
+  const item=document.createElement('div');
+  item.className='pitem';
+  const cv=document.createElement('canvas');
+  cv.width=b.w; cv.height=b.h;
+  drawBrick(cv.getContext('2d'),b,pal,0,0,false,true);
+  const scale=Math.max(1,Math.min(2,Math.round(32/Math.max(b.w,b.h))));
+  cv.style.width=(b.w*scale)+'px'; cv.style.height=(b.h*scale)+'px';
+  item.appendChild(cv);
+  item.title=title;
+  item.onclick=()=>{
+    document.querySelectorAll('#brickPalette .pitem').forEach(x=>x.classList.remove('sel'));
+    item.classList.add('sel');
+    document.querySelectorAll('#objPalette .otype').forEach(x=>x.classList.remove('sel'));
+    state.brushObjType=null;
+    state.tool='placeBrick';
+    onClick();
+    updateToolUI();
+  };
+  return item;
+}
+
+function blockContentKey(b, pal){
+  // Downsample to a small grid of averaged, quantized colors — catches
+  // "visually the same tile" even when the underlying pixel-index data
+  // differs slightly between levels (different palette layout, a re-export,
+  // minor art tweaks). Uses the same centered positioning as the renderer.
+  const N=5;
+  const cellW=Math.max(1,b.w/N), cellH=Math.max(1,b.h/N);
+  const sums=Array.from({length:N*N},()=>[0,0,0,0]); // r,g,b,count
+  for(let ry=0; ry<b.rows.length; ry++){
+    const row=b.rows[ry];
+    const cnt=row.px.length;
+    const xstart=Math.floor((b.w-cnt)/2);
+    for(let rx=0; rx<cnt; rx++){
+      const v=row.px[rx]; if(!v) continue;
+      const x=xstart+rx, y=ry;
+      const cx=Math.min(N-1, Math.floor(x/cellW)), cy=Math.min(N-1, Math.floor(y/cellH));
+      const c=pal[v];
+      const cell=sums[cy*N+cx];
+      cell[0]+=c[0]; cell[1]+=c[1]; cell[2]+=c[2]; cell[3]++;
+    }
+  }
+  let key=Math.round(b.w/8)+','+Math.round(b.h/8)+'|';
+  for(const [r,g,bl,c] of sums){
+    if(c===0){ key+='_,'; continue; }
+    key += Math.round(r/c/24)+'.'+Math.round(g/c/24)+'.'+Math.round(bl/c/24)+',';
+  }
+  return key;
+}
+
+function buildBrickPalette(){
+  const box=document.getElementById('brickPalette');
+  box.innerHTML='';
+  const p=state.parsed; if(!p)return;
+  const seen=new Set(); // content keys already shown — later duplicates (even from other levels) are hidden
+
+  const ownLabel=document.createElement('div');
+  ownLabel.className='mono-small';
+  ownLabel.style.width='100%';
+  ownLabel.textContent='— '+T('this level','этот уровень')+' ('+levelDisplay[state.key]+') —';
+  box.appendChild(ownLabel);
+
+  let ownShown=0;
+  p.blocks.forEach((b,idx)=>{
+    const key=blockContentKey(b,p.pal);
+    if(seen.has(key))return;
+    seen.add(key);
+    ownShown++;
+    const known=p.blockDefaultType.has(idx);
+    const title='#'+idx+' '+b.w+'x'+b.h+(known?' (type='+p.blockDefaultType.get(idx)+')':T(' (new, type unknown)',' (новый, тип неизвестен)'));
+    const item=makePitem(b,p.pal,title,()=>{ state.brushBlock=idx; });
+    box.appendChild(item);
+  });
+
+  // theme-wide palette: other levels of the SAME theme only (cross-theme
+  // tiles are never shown — different themes' art doesn't belong together,
+  // and themeSources itself is now only ever populated for the active
+  // theme). Shown with each source level's own palette for correct colors,
+  // placed lazily on first actual use (see placeBrickAt). Duplicate tile
+  // art (very common between levels of one theme) is shown only once.
+  let dupSkipped=0, foreignShown=0;
+  for(const key of Object.keys(themeSources).sort()){
+    if(key===state.key)continue;
+    const src=themeSources[key];
+    const group=document.createElement('div');
+    group.style.width='100%';
+    const label=document.createElement('div');
+    label.className='mono-small';
+    label.style.marginTop='6px';
+    label.textContent='— '+T('from level','из уровня')+' '+src.display+' —';
+    let anyInGroup=false;
+    const items=[];
+    src.blocks.forEach((b,srcIdx)=>{
+      const ckey=blockContentKey(b,src.pal);
+      if(seen.has(ckey)){ dupSkipped++; return; }
+      seen.add(ckey);
+      anyInGroup=true; foreignShown++;
+      const known=src.blockDefaultType.has(srcIdx);
+      const title='#'+srcIdx+' '+T('from','из')+' '+src.display+' '+b.w+'x'+b.h+
+        (known?' (type='+src.blockDefaultType.get(srcIdx)+')':T(' (type unknown)',' (тип неизвестен)'));
+      const item=makePitem(b,src.pal,title,()=>{ state.brushBlock={srcKey:key, srcIdx}; });
+      items.push(item);
+    });
+    if(anyInGroup){
+      box.appendChild(label);
+      for(const it of items) box.appendChild(it);
+    }
+  }
+  if(dupSkipped>0){
+    const info=document.createElement('div');
+    info.className='mono-small';
+    info.style.width='100%';
+    info.style.marginTop='4px';
+    info.textContent=T(`(hidden duplicates of the same tile: ${dupSkipped})`,`(скрыто повторов той же плитки: ${dupSkipped})`);
+    box.appendChild(info);
+  }
+}
+
+// Most common real-world tail pattern (everything after type/x/y) per
+// object type, computed from all 147 level .OB files. Using these as the
+// default for new objects (instead of all-zero) matches how the vast
+// majority of real placements are actually configured, which should make
+// new objects far more likely to work correctly out of the box. A couple
+// of types (1, 31) have position-looking numbers baked into their most
+// common tail — those are flagged as suspect in the UI since they may be
+// level-specific references rather than universal constants.
+// Regenerated from a full scan of ALL 147 levels' real .OB data (every
+// single occurrence of every type, not a small sample), cross-checked
+// against OB_LEN so every tail here is GUARANTEED the correct length for
+// its type. The previous version of this table had gone stale after OB_LEN
+// itself was corrected (the fixed-length parser rewrite) — 5 types (0, 1, 6,
+// 13, 28) still held tail arrays sized for the OLD, wrong per-type lengths,
+// so placing e.g. a type-1 object wrote 20 tail values into a record that
+// is only supposed to hold 4, corrupting every object's bytes after it in
+// the file. Always regenerate this table together with OB_LEN — never hand-edit.
+const OB_DEFAULT_TAIL = {"0":[2,0,0,0,3,1,3,1],"1":[0,0,0,0],"2":[0,0,0,0],"3":[0,0,0,0],"4":[0,0,0,0],"5":[0,0,0,0],"6":[2,0,0,0,3,2,3,1],"7":[1,0,0,0,3,2],"8":[4,4,0,0,3,2,4,1,3,1,3,2,1,1,0,0],"9":[0,0,0,0],"10":[0,0,0,0],"11":[0,0,0,0],"12":[0,0,0,0],"13":[1,3,0,0,6,1,0,0,0],"14":[1,1,1,0,3,1,0,6,0],"15":[1,0,0,0,3,2],"16":[11,8,0,0,4,1,3,1,3,1,3,1,3,1,3,1,4,1,5,1,3,1,3,1,3,0,0,0,0,10,0,0,0,0],"17":[1,1,1,0,3,1,0,6,0],"18":[0,0,0,0],"22":[0,0,0,0],"23":[0,0,0,0],"24":[2,0,0,0,3,1,3,1],"27":[1,2,0,0,4,1,0,1],"28":[2,0,0,0,4,1,3,2],"29":[2,0,0,0,4,1,3,1],"30":[2,0,0,0,3,2,3,1],"31":[8,1,0,0,9,8,9,32,13,8,6,1,9,8,9,2,9,16,9,4,0],"32":[2,0,0,0,5,1,3,1],"33":[2,1,0,0,3,1,5,1,0],"34":[1,0,0,0,3,1],"35":[0,0,0,0],"36":[0,0,0,0],"37":[0,0,0,0],"38":[0,0,0,0],"39":[0,0,0,0],"40":[0,0,0,0],"41":[0,0,0,0],"42":[0,0,0,0],"43":[0,0,0,0],"44":[1,0,0,0,11,1],"45":[1,0,0,0,3,1],"46":[1,0,0,0,3,1]};
+// Types whose tail is NOT always identical across every real occurrence in
+// the game (i.e. the value above is only the single most common variant,
+// not a guarantee) — placing one of these with the default tail is a
+// reasonable guess, not a confirmed-safe value. Also regenerated from the
+// full 147-level scan; the old hand-maintained set {1,31} had drifted badly
+// out of date and was missing most of the types that actually vary.
+const OB_SUSPECT_DEFAULT = new Set([0,1,3,6,7,8,13,14,15,16,17,24,27,28,31,32,33,44,46]);
+
+// Confidence levels from analyzing all 147 levels' .OB data (not just the
+// original 4-level sample). "safe" = tail params are always exactly zero
+// in every real occurrence, so placing a new one with zeros matches real
+// usage exactly. "known" = behavior empirically confirmed by direct in-game
+// testing. "risky" = tail carries real, varying, not-understood data
+// (placing with zeros is a guess and has caused crashes in testing), or the
+// record length itself isn't fully certain.
+const OB_NOTES_RU = {
+  9:{label:'known', note:'подтверждено: точка старта Джека. Спрайт — JACKS.SPR'},
+  13:{label:'known', note:'подтверждено: выход. Спрайт из BELL.SPR, три части снизу вверх: жёлтое основание → столб → круглый звонок сверху. Поле 9 (rawIdx8) — режим появления: 1=выход сразу стоит на уровне; 2=невидим, появляется после сбора всех частей ракеты (тема Launch) — всегда идёт в паре с полем 12 (rawIdx11)=327; 8=невидим, появляется после сбора определённого % мусора пылесосом (тема City) — идёт в паре с полем 11 (rawIdx10), где значение — примерный % мусора для появления (обычно 80+)'},
+  2:{label:'known', note:'подтверждено: точка возрождения после раздавливания + место возврата потерянного молота. Спрайт — вращающийся полосатый цилиндр, FLAG.SPR'},
+  0:{label:'known', note:'подтверждено: качели. Поле 11: 1=деревянные (CSAW.SPR), 2=металлические (BCSAW.SPR). ⚠ В файле нашлась только стойка/опора — саму качающуюся балку отдельным спрайтом найти не удалось'},
+  1:{label:'known', note:'подтверждено: груз/гиря для качелей. Спрайт — LEAD.SPR'},
+  7:{label:'known', note:'подтверждено: ядро для пушки (CFIR.SPR, кадр отдельного круглого шара). Поле 9: 2=большое (по умолчанию), 1=маленькое'},
+  8:{label:'known', note:'подтверждено: мешок ядер. Спрайт составной: белое горлышко + оранжевое тело (оба из DIS.SPR)'},
+  22:{label:'known', note:'подтверждено: пружина/трамплин. Спрайт составной: серая база + оранжевая шляпка сверху (оба из SUCKER.SPR)'},
+  23:{label:'known', note:'подтверждено: погрузчик. Точный спрайт пока не найден (FORK.SPR не подошёл по виду)'},
+  24:{label:'known', note:'подтверждено: шестерёнки — улучшение скорости погрузчика. Спрайт — FORK.SPR, кадр 12 (два сцепленных зубчатых колеса). Поле 9 (rawIdx8): 1=объект сразу виден на уровне; 2=должен быть спрятан в ящик/бочку по принципу t14 — ⚠ если поставлен со значением 2, но не размещён поверх подходящего ящика, уровень просто не грузится (не краш редактора/формата — так ведёт себя сама игра). Хвост записи (8 доп. слов) восстановлен из реальных байт 9L: [2,0,0,0,3,2,3,1] — назначение остальных полей не изучено (только 1 экземпляр в игре, не с чем сравнить статистически). Длина записи = 11 слов, подтверждена round-trip проверкой на всех 147 уровнях'},
+  27:{label:'known', note:'подтверждено: телепорт. Спрайт — TELLY.SPR. Логика связи пары: поле 11 (rawIdx10) — ID "исходящий" (куда телепортировать), поле 10 (rawIdx9) — ID "принимающий". Если у телепорта A поле11=N, а у телепорта B поле10=N — прыжок идёт из A в B'},
+  28:{label:'known', note:'подтверждено: красная кнопка. Спрайт — REDBUT.SPR (красный вариант)'},
+  29:{label:'known', note:'подтверждено: зелёная кнопка (аналог t28). Спрайт — REDBUT.SPR (зелёный вариант)'},
+  30:{label:'known', note:'подтверждено: синяя кнопка (аналог t28/t29). Спрайт — REDBUT.SPR (синий вариант)'},
+  46:{label:'known', note:'подтверждено: 1UP (жизнь) — золотой Джек с молотом (см. референс). Настоящий игровой спрайт не найден среди файлов, используется самодельная иконка-заглушка (золотой значок "1UP")'},
+  6:{label:'known', note:'подтверждено: пушка. Поле 11: 1=стоячая/неподвижная (дуло CFIR + основание CFIX), 2=на колесе/подвижная (дуло CFIR + колесо CWHL)'},
+  14:{label:'known', note:'подтверждено: спавнер молоточков внутри разрушаемого блока. Поле 10=направление(0/1) или количество(2+), поле 12=поведение (0 обычный — спрайт TIMMY.SPR, 1 хитрый, 2 белый/разрушает блоки — спрайт TOMMY.SPR)'},
+  17:{label:'known', note:'подтверждено: то же самое, что t14, но большой молоточек с золотистой шляпкой. Спрайт — KTIMMY.SPR. Поля — та же схема, что у t14'},
+  15:{label:'known', note:'подтверждено: взрывной пирог, активация от касания. Поле 9: 2=без свечки (по умолчанию), 1=со свечкой. Спрайт — DYNA.SPR (есть отдельные кадры для варианта со свечкой и с шариком)'},
+  3:{label:'known', note:'подтверждено: точка возрождения/возврата молота для игрока 2 в коопе (аналог t2 для игрока 1). Встречается 1 раз на уровень, всегда рядом с t2/t4/t5, только в темах B/K/D (кооп-темы)'},
+  4:{label:'known', note:'подтверждено: то же самое для игрока 3 в коопе — аналог t2/t3'},
+  5:{label:'known', note:'подтверждено: то же самое для игрока 4 в коопе — аналог t2/t3/t4'},
+  33:{label:'known', note:'подтверждено: ходячий бонус. Спрайт — BON.SPR. Поле 9 (rawIdx5): 1=сразу появляется и бегает открыто, 2=спрятан в блок по принципу спавнера t14. Поле 11 (rawIdx7) — тип бонуса внутри: 1=часы (+к таймеру), 2=бегающие молоточки (в паре с полем 12 = количество, 0 и 1 = один молоточек, 2 = два и т.д.), 4=супер-пылесос, 8=бонус к сбору треша. Найдено 2 экземпляра (7S, 8S) где поле11=1 (часы), но поле12=10 (не 0) — то есть поле12 не игнорируется даже для часов, возможно определяет длительность бонуса времени в этом случае, а не только число молоточков. Статистика по всем 48 экземплярам: остальные поля 1-5 всегда константны (2,1,0,0,3), поле7 всегда 5'},
+  10:{label:'known', note:'подтверждено: точка старта игрока 2 в коопе (аналог t9 для игрока 1). Та же кластеризация и тот же набор тем (B/K/D), что у t3/4/5 — расположены рядом с t9 практически в одной точке'},
+  11:{label:'known', note:'подтверждено: старт игрока 3 в коопе — аналог t9/t10'},
+  12:{label:'known', note:'подтверждено: старт игрока 4 в коопе — аналог t9/t10/t11'},
+  18:{label:'known', note:'подтверждено: встречается только в кооп-режиме. Спрайт — TIMBIN.SPR, кадр 0'},
+  32:{label:'known', note:'подтверждено: шипастый зелёный враг. Спрайт — SPK.SPR. Не может появиться на первой теме уровней (вероятно, ограничение движка). Поле 11 (rawIdx10): 1=сразу бегает по уровню открыто, 2=спрятан внутри блока (чаще бочка), появляется по принципу спавнера t14. Поле 9 (rawIdx8) — поведение: 1=просто бегает, 2=иногда выпускает колючки, 4=визуально то же самое, что и 2 — разница не до конца понятна'},
+  45:{label:'known', note:'подтверждено: враг-бомба. Спрайт — BOM.SPR. Как и t32, не может появиться на первой теме уровней (ограничение движка) — работает только на определённых темах'},
+  31:{label:'unclear', note:'предположение: возможно НЛО (UFO.SPR встречается в игре) — не подтверждено. Сложная составная структура (длина 24, похоже на несколько вложенных под-записей вида "9,X,9,Y" плюс блок "13,Z,6,1"). Статистика по всем 36 экземплярам: поля 1-4 и структурные маркеры (9,13,6) всегда константны; варьируются только несколько полей со значениями-степенями двойки (1/2/4/8/16/32/64/128 — похоже на битовые маски направлений/паттернов движения) и последнее поле (почти всегда 0, изредка 1 или 3)'},
+  16:{label:'risky', note:'невидим при постановке — родственно t14/15/17, но само по себе пока не идентифицировано'},
+  35:{label:'known', note:'подтверждено: часть ракеты (тема Launch) — самая верхушка (нос с антенной). Спрайт — APOLLO.SPR, кадр 8. Собирается вся цепочка t35→t43 для активации выхода (см. поле9/12 у t13)'},
+  36:{label:'known', note:'подтверждено: часть ракеты — секция сразу под носом (t35). Спрайт — APOLLO.SPR, кадр 7'},
+  37:{label:'known', note:'подтверждено: часть ракеты — секция ниже t36, с боковой скобой/защёлкой. Спрайт — APOLLO.SPR, кадр 6'},
+  38:{label:'known', note:'подтверждено: часть ракеты — переходный тёмный конус ниже t37. Спрайт — APOLLO.SPR, кадр 5'},
+  39:{label:'known', note:'подтверждено: часть ракеты — панель с боковыми "лампами"/баллонами ниже t38. Спрайт — APOLLO.SPR, кадр 2'},
+  40:{label:'known', note:'подтверждено: часть ракеты — панель с красной круглой эмблемой ниже t39. Спрайт — APOLLO.SPR, кадр 3'},
+  41:{label:'known', note:'подтверждено: часть ракеты — панель с боковыми "лампами" (визуальный дубль t39) ниже t40. Спрайт — APOLLO.SPR, кадр 4'},
+  42:{label:'known', note:'подтверждено: часть ракеты — юбка с красным пламенем ниже t41. Спрайт — APOLLO.SPR, кадр 1'},
+  43:{label:'known', note:'подтверждено: часть ракеты — основание, 3 сопла двигателя (самый низ). Спрайт — APOLLO.SPR, кадр 0'},
+  44:{label:'known', note:'подтверждено: автоматический гусеничный робот-сборщик частей ракеты (тема Launch). Спрайт — CRAWL.SPR, кадр 0. ⚠ Работает только на теме Launch и требует под собой платформу-блок — на других темах или без платформы уровень не загружается'},
+};
+const OB_NOTES_EN = {
+  9:{label:'known', note:'Confirmed: Jack\'s start point. Sprite — JACKS.SPR'},
+  13:{label:'known', note:'Confirmed: exit. Sprite from BELL.SPR, three parts bottom-to-top: yellow base → pole → round bell on top. Field 9 (rawIdx8) — appearance mode: 1=exit is present from the start; 2=invisible, appears after collecting all rocket parts (Launch theme) — always paired with field 12 (rawIdx11)=327; 8=invisible, appears after the vacuum collects a certain % of trash (City theme) — paired with field 11 (rawIdx10), whose value is the approximate % of trash needed (usually 80+)'},
+  2:{label:'known', note:'Confirmed: respawn point after being crushed + return point for a lost hammer. Sprite — spinning striped cylinder, FLAG.SPR'},
+  0:{label:'known', note:'Confirmed: swing/seesaw. Field 11: 1=wooden (CSAW.SPR), 2=metal (BCSAW.SPR). ⚠ Only the stand/support was found in the sprite files — the swinging beam itself could not be located as a separate sprite'},
+  1:{label:'known', note:'Confirmed: counterweight for the swing. Sprite — LEAD.SPR'},
+  7:{label:'known', note:'Confirmed: cannonball (CFIR.SPR, a single round-ball frame). Field 9: 2=large (default), 1=small'},
+  8:{label:'known', note:'Confirmed: bag of cannonballs. Composite sprite: white neck + orange body (both from DIS.SPR)'},
+  22:{label:'known', note:'Confirmed: spring/trampoline. Composite sprite: grey base + orange cap on top (both from SUCKER.SPR)'},
+  23:{label:'known', note:'Confirmed: forklift/loader. The exact sprite hasn\'t been pinned down yet (FORK.SPR didn\'t visually match)'},
+  24:{label:'known', note:'Confirmed: gears — forklift speed upgrade. Sprite — FORK.SPR, frame 12 (two meshed gear wheels). Field 9 (rawIdx8): 1=object is visible immediately on the level; 2=must be hidden inside a crate/barrel following the t14 spawner principle — ⚠ if placed with value 2 but not on top of a suitable crate, the level simply fails to load (not an editor/format crash — that\'s the game\'s own behavior). The record tail (8 extra words) was reconstructed from the real bytes of level 9L: [2,0,0,0,3,2,3,1] — the meaning of the remaining fields is unstudied (only 1 instance exists in the whole game, nothing to compare statistically). Record length = 11 words, confirmed by round-trip testing on all 147 levels'},
+  27:{label:'known', note:'Confirmed: teleporter. Sprite — TELLY.SPR. Pairing logic: field 11 (rawIdx10) — "outgoing" ID (where to teleport to), field 10 (rawIdx9) — "receiving" ID. If teleporter A has field11=N and teleporter B has field10=N, the jump goes from A to B'},
+  28:{label:'known', note:'Confirmed: red button. Sprite — REDBUT.SPR (red variant)'},
+  29:{label:'known', note:'Confirmed: green button (analog of t28). Sprite — REDBUT.SPR (green variant)'},
+  30:{label:'known', note:'Confirmed: blue button (analog of t28/t29). Sprite — REDBUT.SPR (blue variant)'},
+  46:{label:'known', note:'Confirmed: 1UP (extra life) — a golden Jack holding a hammer (see reference screenshot). The real in-game sprite wasn\'t found among the files; a homemade placeholder icon is used instead (a gold "1UP" badge)'},
+  6:{label:'known', note:'Confirmed: cannon. Field 11: 1=stationary/fixed (barrel CFIR + base CFIX), 2=on a wheel/mobile (barrel CFIR + wheel CWHL)'},
+  14:{label:'known', note:'Confirmed: hammer spawner inside a breakable block. Field 10=direction(0/1) or count(2+), field 12=behavior (0 normal — sprite TIMMY.SPR, 1 tricky, 2 white/breaks blocks — sprite TOMMY.SPR)'},
+  17:{label:'known', note:'Confirmed: same as t14, but a big hammer with a golden cap. Sprite — KTIMMY.SPR. Fields follow the same scheme as t14'},
+  15:{label:'known', note:'Confirmed: explosive cake/pie, triggers on touch. Field 9: 2=no candle (default), 1=with a candle. Sprite — DYNA.SPR (has separate frames for the candle variant and the ball variant)'},
+  3:{label:'known', note:'Confirmed: respawn/hammer-return point for player 2 in co-op (analog of t2 for player 1). Appears once per level, always next to t2/t4/t5, only in themes B/K/D (co-op themes)'},
+  4:{label:'known', note:'Confirmed: same as above for player 3 in co-op — analog of t2/t3'},
+  5:{label:'known', note:'Confirmed: same as above for player 4 in co-op — analog of t2/t3/t4'},
+  33:{label:'known', note:'Confirmed: walking bonus. Sprite — BON.SPR. Field 9 (rawIdx5): 1=appears and runs around openly right away, 2=hidden in a crate following the t14 spawner principle. Field 11 (rawIdx7) — the bonus type inside it: 1=clock (+time bonus), 2=running hammers (paired with field 12 = count; 0 and 1 give one hammer, 2 gives two, etc.), 4=super vacuum bonus, 8=trash-collecting bonus. Found 2 instances (7S, 8S) where field11=1 (clock) but field12=10 (not 0) — meaning field12 is not ignored even for the clock bonus; it may set the duration of the time bonus in that case rather than only a hammer count. Stats across all 48 instances: fields 1-5 are always constant (2,1,0,0,3), field 7 is always 5'},
+  10:{label:'known', note:'Confirmed: player 2\'s start point in co-op (analog of t9 for player 1). Same clustering and same set of themes (B/K/D) as t3/4/5 — placed right next to t9, almost at the same point'},
+  11:{label:'known', note:'Confirmed: player 3\'s start in co-op — analog of t9/t10'},
+  12:{label:'known', note:'Confirmed: player 4\'s start in co-op — analog of t9/t10/t11'},
+  18:{label:'known', note:'Confirmed: only appears in co-op mode. Sprite — TIMBIN.SPR, frame 0'},
+  32:{label:'known', note:'Confirmed: green spiky enemy. Sprite — SPK.SPR. Cannot appear on the first level theme (likely an engine restriction). Field 11 (rawIdx10): 1=runs around the level openly right away, 2=hidden inside a block (usually a barrel), appears using the t14 spawner principle. Field 9 (rawIdx8) — behavior: 1=just runs around, 2=occasionally releases spikes, 4=visually identical to 2 — the difference isn\'t fully understood'},
+  45:{label:'known', note:'Confirmed: bomb enemy. Sprite — BOM.SPR. Like t32, cannot appear on the first level theme (engine restriction) — only works on certain themes'},
+  31:{label:'unclear', note:'Hypothesis: possibly a UFO (UFO.SPR exists in the game) — unconfirmed. Complex composite structure (length 24, looks like several nested sub-records of the form "9,X,9,Y" plus a "13,Z,6,1" block). Stats across all 36 instances: fields 1-4 and the structural markers (9,13,6) are always constant; only a few fields vary, taking power-of-two values (1/2/4/8/16/32/64/128 — looks like bitmasks for movement direction/patterns), plus the last field (almost always 0, occasionally 1 or 3)'},
+  16:{label:'risky', note:'Invisible when placed — related to t14/15/17, but hasn\'t been identified on its own yet'},
+  35:{label:'known', note:'Confirmed: rocket part (Launch theme) — the very top (nose with antenna). Sprite — APOLLO.SPR, frame 8. The whole chain t35→t43 needs to be collected to activate the exit (see field9/12 on t13)'},
+  36:{label:'known', note:'Confirmed: rocket part — the section right below the nose (t35). Sprite — APOLLO.SPR, frame 7'},
+  37:{label:'known', note:'Confirmed: rocket part — the section below t36, with a side clamp/latch. Sprite — APOLLO.SPR, frame 6'},
+  38:{label:'known', note:'Confirmed: rocket part — dark transition cone below t37. Sprite — APOLLO.SPR, frame 5'},
+  39:{label:'known', note:'Confirmed: rocket part — panel with side "lamps"/tanks below t38. Sprite — APOLLO.SPR, frame 2'},
+  40:{label:'known', note:'Confirmed: rocket part — panel with a red round emblem below t39. Sprite — APOLLO.SPR, frame 3'},
+  41:{label:'known', note:'Confirmed: rocket part — panel with side "lamps" (visual duplicate of t39) below t40. Sprite — APOLLO.SPR, frame 4'},
+  42:{label:'known', note:'Confirmed: rocket part — skirt with red flame below t41. Sprite — APOLLO.SPR, frame 1'},
+  43:{label:'known', note:'Confirmed: rocket part — base, 3 engine nozzles (very bottom). Sprite — APOLLO.SPR, frame 0'},
+  44:{label:'known', note:'Confirmed: automatic tracked robot that assembles the rocket parts (Launch theme). Sprite — CRAWL.SPR, frame 0. ⚠ Only works on the Launch theme and requires a platform block underneath it — on other themes or without a platform the level fails to load'},
+};
+function getObNotes(){ return (typeof LANG!=='undefined' && LANG==='ru') ? OB_NOTES_RU : OB_NOTES_EN; }
+// Known meanings for specific fields of specific object types, learned from
+// direct in-game testing. Key = type, value = {rawIndex: label}. Anything
+// not listed here just shows as generic "поле N".
+const OB_FIELD_LABELS_RU = {
+  0: { 10: 'материал (1=дерево, 2=металл)' },
+  6: { 10: 'тип (1=стоячая, 2=на колесе/подвижная)' },
+  7: { 8: 'размер (1=маленькое, 2=большое)' },
+  13: {
+    8: 'режим выхода (1=сразу, 2=после сбора ракеты, 8=после сбора мусора)',
+    10: '% мусора для появления (тема City)',
+    11: 'значение-спутник (327 при режиме=2, ракета)',
+  },
+  15:{ 8: 'свечка (1=есть, 2=нет)' },
+  14: {
+    9: 'направление(0/1)/кол-во молотков(2+)',
+    11: 'поведение (0=обычн,1=хитрый,2=белый)',
+  },
+  17: {
+    9: 'направление(0/1)/кол-во молотков(2+)',
+    11: 'поведение (0=обычн,1=хитрый,2=белый)',
+  },
+  24: {
+    8: 'видимость (1=сразу виден, 2=спрятан в ящик)',
+  },
+  27: {
+    9: 'ID принимающий (куда телепортируют СЮДА)',
+    10: 'ID исходящий (куда телепортирует ОТСЮДА)',
+  },
+  32: {
+    8: 'поведение (1=просто бегает, 2/4=иногда выпускает колючки)',
+    10: 'видимость (1=сразу бегает, 2=спрятан в блок)',
+  },
+  33: {
+    5: 'видимость (1=сразу бегает, 2=спрятан в блок)',
+    7: 'тип бонуса (1=часы, 2=молоточки, 4=супер-пылесос, 8=сбор мусора)',
+    8: 'кол-во молоточков (0/1=один, 2=два...) / длительность для часов',
+  },
+};
+const OB_FIELD_LABELS_EN = {
+  0: { 10: 'material (1=wood, 2=metal)' },
+  6: { 10: 'type (1=stationary, 2=on wheel/mobile)' },
+  7: { 8: 'size (1=small, 2=large)' },
+  13: {
+    8: 'exit mode (1=from the start, 2=after collecting the rocket, 8=after collecting trash)',
+    10: '% of trash needed to appear (City theme)',
+    11: 'companion value (327 when mode=2, rocket)',
+  },
+  15:{ 8: 'candle (1=yes, 2=no)' },
+  14: {
+    9: 'direction(0/1)/hammer count(2+)',
+    11: 'behavior (0=normal,1=tricky,2=white)',
+  },
+  17: {
+    9: 'direction(0/1)/hammer count(2+)',
+    11: 'behavior (0=normal,1=tricky,2=white)',
+  },
+  24: {
+    8: 'visibility (1=visible immediately, 2=hidden in crate)',
+  },
+  27: {
+    9: 'receiving ID (where teleports lead TO this one)',
+    10: 'outgoing ID (where this one teleports FROM)',
+  },
+  32: {
+    8: 'behavior (1=just runs, 2/4=occasionally releases spikes)',
+    10: 'visibility (1=runs right away, 2=hidden in a block)',
+  },
+  33: {
+    5: 'visibility (1=runs right away, 2=hidden in a block)',
+    7: 'bonus type (1=clock, 2=hammers, 4=super vacuum, 8=trash collecting)',
+    8: 'hammer count (0/1=one, 2=two...) / duration for the clock bonus',
+  },
+};
+function getFieldLabels(){ return (typeof LANG!=='undefined' && LANG==='ru') ? OB_FIELD_LABELS_RU : OB_FIELD_LABELS_EN; }
+
+// ---- User-assigned names/notes (persist in this browser via localStorage,
+// survive reloads and new levels — this is what accumulates as you test
+// object types over time; separate from the built-in OB_NOTES above, which
+// are our own pre-filled findings). Keys are the object type number.
+const USER_DATA_KEY='trashit_editor_user_names_v1';
+let userNames={ types:{}, fields:{} }; // types[t]=name, fields[t][idx]=label
+try{
+  const stored=localStorage.getItem(USER_DATA_KEY);
+  if(stored) userNames=JSON.parse(stored);
+}catch(e){ console.warn('could not load saved names', e); }
+if(!userNames.types) userNames.types={};
+if(!userNames.fields) userNames.fields={};
+function saveUserNames(){
+  try{ localStorage.setItem(USER_DATA_KEY, JSON.stringify(userNames)); }
+  catch(e){ console.warn('could not save names', e); }
+}
+// Built-in short names for confirmed object types (shown in the palette by
+// default, before any user override). Types not listed just show "тип N".
+const BUILTIN_TYPE_NAMES_RU = {
+  0: 'Качели (стойка)',
+  1: 'Груз качелей',
+  2: 'Возрождение П1',
+  3: 'Возрождение П2 (кооп)',
+  4: 'Возрождение П3 (кооп)',
+  5: 'Возрождение П4 (кооп)',
+  6: 'Пушка',
+  7: 'Ядро пушки',
+  8: 'Мешок ядер',
+  9: 'Старт игрока 1',
+  10: 'Старт игрока 2 (кооп)',
+  11: 'Старт игрока 3 (кооп)',
+  12: 'Старт игрока 4 (кооп)',
+  13: 'Выход',
+  14: 'Спавнер молоточков',
+  15: 'Взрывной пирог',
+  17: 'Спавнер молоточков (золотой)',
+  18: 'Кооп-объект (TIMBIN)',
+  22: 'Пружина/трамплин',
+  23: 'Погрузчик',
+  24: 'Шестерёнки (погрузчик)',
+  27: 'Телепорт',
+  28: 'Красная кнопка',
+  29: 'Зелёная кнопка',
+  30: 'Синяя кнопка',
+  31: 'НЛО (неподтв.)',
+  32: 'Шипастый враг',
+  33: 'Ходячий бонус',
+  35: 'Ракета: нос',
+  36: 'Ракета: секция 2',
+  37: 'Ракета: секция со скобой',
+  38: 'Ракета: переходный конус',
+  39: 'Ракета: секция с лампами',
+  40: 'Ракета: секция с эмблемой',
+  41: 'Ракета: секция с лампами 2',
+  42: 'Ракета: юбка с пламенем',
+  43: 'Ракета: основание (сопла)',
+  44: 'Робот-гусеница (ракета)',
+  45: 'Враг-бомба',
+  46: '1UP (жизнь)',
+};
+const BUILTIN_TYPE_NAMES_EN = {
+  0: 'Swing (stand)',
+  1: 'Swing counterweight',
+  2: 'Respawn P1',
+  3: 'Respawn P2 (co-op)',
+  4: 'Respawn P3 (co-op)',
+  5: 'Respawn P4 (co-op)',
+  6: 'Cannon',
+  7: 'Cannonball',
+  8: 'Bag of cannonballs',
+  9: 'Player 1 start',
+  10: 'Player 2 start (co-op)',
+  11: 'Player 3 start (co-op)',
+  12: 'Player 4 start (co-op)',
+  13: 'Exit',
+  14: 'Hammer spawner',
+  15: 'Explosive cake',
+  17: 'Hammer spawner (golden)',
+  18: 'Co-op object (TIMBIN)',
+  22: 'Spring/trampoline',
+  23: 'Forklift',
+  24: 'Gears (forklift)',
+  27: 'Teleporter',
+  28: 'Red button',
+  29: 'Green button',
+  30: 'Blue button',
+  31: 'UFO (unconfirmed)',
+  32: 'Spiky enemy',
+  33: 'Walking bonus',
+  35: 'Rocket: nose',
+  36: 'Rocket: section 2',
+  37: 'Rocket: section with clamp',
+  38: 'Rocket: transition cone',
+  39: 'Rocket: section with lamps',
+  40: 'Rocket: section with emblem',
+  41: 'Rocket: section with lamps 2',
+  42: 'Rocket: flame skirt',
+  43: 'Rocket: base (nozzles)',
+  44: 'Crawler robot (rocket)',
+  45: 'Bomb enemy',
+  46: '1UP (extra life)',
+};
+function getTypeNames(){ return (typeof LANG!=='undefined' && LANG==='ru') ? BUILTIN_TYPE_NAMES_RU : BUILTIN_TYPE_NAMES_EN; }
+
+function typeColor(t){
+  // Stable, distinct-looking color per object type (not a real sprite, but
+  // enough to tell types apart at a glance on the map without opening the
+  // side panel). Golden-angle hue spread keeps adjacent type numbers from
+  // landing on similar hues.
+  const hue=(t*137.508)%360;
+  return `hsl(${hue.toFixed(0)},75%,55%)`;
+}
+function typeLabel(t){
+  const custom=userNames.types[t];
+  const typeWord = (typeof LANG!=='undefined' && LANG==='ru') ? 'тип' : 'type';
+  if(custom) return `${custom} (${typeWord} ${t})`;
+  const builtin=getTypeNames()[t];
+  return builtin ? `${builtin} (${typeWord} ${t})` : `${typeWord} ${t}`;
+}
+function fieldLabel(t, rawIdx){
+  const custom = userNames.fields[t] && userNames.fields[t][rawIdx];
+  if(custom) return custom;
+  const builtin = (getFieldLabels()[t]||{})[rawIdx];
+  const fieldWord = (typeof LANG!=='undefined' && LANG==='ru') ? 'поле' : 'field';
+  return builtin || (fieldWord+' '+(rawIdx+1));
+}
+
+function buildObjPalette(){
+  const box=document.getElementById('objPalette');
+  box.innerHTML='';
+  Object.keys(OB_PLACE_LEN).map(Number).sort((a,b)=>a-b).forEach(t=>{
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:2px;margin-bottom:2px';
+    const btn=document.createElement('button');
+    const info=getObNotes()[t];
+    btn.className='otype';
+    btn.style.flex='1';
+    btn.style.borderLeft='4px solid '+typeColor(t);
+    btn.textContent=`${typeLabel(t)} (${OB_PLACE_LEN[t]} ${T('words','слов')})`;
+    btn.title = info ? info.note : T('no data about this type — status unknown','нет данных об этом типе — статус неизвестен');
+    btn.onclick=()=>{
+      state.brushObjType=t; state.brushBlock=null;
+      state.tool='placeObject';
+      document.querySelectorAll('#objPalette .otype').forEach(x=>x.classList.remove('sel'));
+      btn.classList.add('sel');
+      document.querySelectorAll('#brickPalette .pitem').forEach(x=>x.classList.remove('sel'));
+      updateToolUI();
+    };
+    const renameBtn=document.createElement('button');
+    renameBtn.textContent='✏️';
+    renameBtn.title=T('Give this type your own name (saved in the browser)','Присвоить своё название этому типу (сохранится в браузере)');
+    renameBtn.style.cssText='flex:0 0 auto;padding:2px 6px';
+    renameBtn.onclick=(ev)=>{
+      ev.stopPropagation();
+      const cur=userNames.types[t]||'';
+      const val=prompt(T('Name for type ','Название для типа ')+t+T(' (empty — remove name):',' (пусто — убрать название):'), cur);
+      if(val===null) return;
+      if(val.trim()==='') delete userNames.types[t]; else userNames.types[t]=val.trim();
+      saveUserNames();
+      buildObjPalette();
+      renderSelInfo();
+      renderLevel();
+    };
+    row.appendChild(btn);
+    row.appendChild(renameBtn);
+    box.appendChild(row);
+  });
+}
+
+function updateToolUI(){
+  const hint=document.getElementById('editHint');
+  const selectBtn=document.getElementById('toolSelect');
+  selectBtn.classList.toggle('on', state.tool==='select');
+  if(state.tool!=='placeBrick') document.querySelectorAll('#brickPalette .pitem').forEach(x=>x.classList.remove('sel'));
+  if(state.tool!=='placeObject') document.querySelectorAll('#objPalette .otype').forEach(x=>x.classList.remove('sel'));
+  if(state.mode!=='edit'){hint.style.display='none';return;}
+  hint.style.display='block';
+  if(state.tool==='placeBrick') hint.textContent=T('Click on empty space — place brick ','Клик по пустому месту — поставить кирпич ')+brushLabel()+T('. Click on an existing brick/object — select it instead of placing. (Esc — cancel)','. Клик по существующему кирпичу/объекту — выбрать его вместо постановки. (Esc — отмена)');
+  else if(state.tool==='placeObject') hint.textContent=T('Click on empty space — place object of type ','Клик по пустому месту — поставить объект типа ')+state.brushObjType+T('. Click on an existing one — select it. (Esc — cancel)','. Клик по существующему — выбрать его. (Esc — отмена)');
+  else hint.textContent=T('Click — select, drag with mouse — move, Delete — remove','Клик — выбрать, тяни мышью — двигать, Delete — удалить');
+  vp.classList.toggle('place', state.tool==='placeBrick'||state.tool==='placeObject');
+}
+function brushLabel(){
+  if(state.brushBlock==null)return '';
+  if(typeof state.brushBlock==='object') return '#'+state.brushBlock.srcIdx+' ('+T('from','из')+' '+state.brushBlock.srcKey+')';
+  return '#'+state.brushBlock;
+}
+
+function renderSelInfo(){
+  const box=document.getElementById('selInfo');
+  const p=state.parsed;
+  if(!state.sel||!p){box.innerHTML='<div class="hint">'+T('Click a brick/object on the map, or on the palette above to start placing new ones.','Кликни по кирпичу/объекту на карте, или по палитре выше чтобы начать ставить новые.')+'</div>';return;}
+  if(state.sel.kind==='brick'){
+    const i=state.sel.idx; const e=p.wam.ents[i]; const ie=p.I[i];
+    const colRec=p.col&&p.col[i+1]; // col[0] is a header/placeholder record
+    const knownType=p.blockDefaultType.get(ie.block);
+    const typeMismatch = knownType!=null && knownType!==e.type;
+    box.innerHTML=`
+      <div class="field-row"><label>${T('Block .G2','Блок .G2')}</label><span>#${ie.block} (${p.blocks[ie.block].w}×${p.blocks[ie.block].h})</span></div>
+      <div class="field-row"><label>type (.WAM)</label><input type="number" id="selType" value="${e.type}" style="width:60px">
+        ${knownType!=null?`<span class="mono-small">(${T('usually','обычно')} ${knownType} ${T('for this block','для этого блока')})</span>`:''}</div>
+      ${typeMismatch?'<div class="hint" style="color:var(--bad)">'+T('⚠ type does not match the usual value for this block — risks failing to load in the game!','⚠ type не совпадает с обычным для этого блока — рискует не загрузиться в игре!')+'</div>':''}
+      <div class="field-row"><label>X</label><input type="number" id="selX" value="${e.x}"></div>
+      <div class="field-row"><label>Y</label><input type="number" id="selY" value="${e.y}"></div>
+      <div class="field-row"><label>${T('flip bit','flip-бит')}</label><input type="checkbox" id="selFlip" ${ie.flip?'checked':''}></div>
+      ${colRec?`
+      <div class="field-row"><label>${T('Material','Материал')}</label>
+        <select id="selMat">${COL_MATERIALS.map(v=>`<option value="${v}" ${v===colRec[0]?'selected':''}>${v}</option>`).join('')}</select>
+      </div>
+      <div class="field-row"><label>${T('Durability','Прочность')}</label>
+        <select id="selDur">${COL_DURABILITY.map(v=>`<option value="${v}" ${v===colRec[1]?'selected':''}>${v}</option>`).join('')}</select>
+      </div>
+      <div class="mono-small">.COL ${T('record','запись')} #${i+1}: [${colRec.join(', ')}] (${T('values are limited to the set observed in the game','значения ограничены наблюдаемым набором игры')})</div>
+      `:'<div class="hint">'+T('There is no .COL record for this brick (file not open, or index out of range).','Для этого кирпича нет записи .COL (файл не открыт или индекс вне диапазона).')+'</div>'}
+      <button id="selDelete" class="danger" style="margin-top:8px">🗑 ${T('Delete brick','Удалить кирпич')}</button>
+    `;
+    document.getElementById('selType').onchange=e2=>{e.type=parseInt(e2.target.value)||0;markDirty('WAM');renderLevel();};
+    document.getElementById('selX').onchange=e2=>{e.x=parseInt(e2.target.value)||0;markDirty('WAM');renderLevel();};
+    document.getElementById('selY').onchange=e2=>{e.y=parseInt(e2.target.value)||0;markDirty('WAM');resortBricks();renderLevel();};
+    document.getElementById('selFlip').onchange=e2=>{ie.flip=e2.target.checked?1:0;markDirty('I');renderLevel();};
+    if(colRec){
+      document.getElementById('selMat').onchange=e2=>{colRec[0]=parseInt(e2.target.value);markDirty('COL');renderLevel();};
+      document.getElementById('selDur').onchange=e2=>{colRec[1]=parseInt(e2.target.value);markDirty('COL');renderLevel();};
+    }
+    document.getElementById('selDelete').onclick=()=>deleteBrick(i);
+  }else{
+    const i=state.sel.idx; const o=p.ob.objs[i];
+    const tailFields = o.raw.slice(3).map((v,fi)=>{
+      const rawIdx=fi+3;
+      const label = fieldLabel(o.type, rawIdx);
+      const isCustom = userNames.fields[o.type] && userNames.fields[o.type][rawIdx];
+      return `<div class="field-row">
+        <label style="min-width:150px;font-size:10px;${isCustom?'color:var(--ok)':''}">${label}</label>
+        <input type="number" class="rawfield" data-idx="${rawIdx}" value="${v}" style="width:60px">
+        <button class="fieldRename" data-idx="${rawIdx}" title="${T('Name this field','Назвать это поле')}" style="padding:1px 5px;font-size:10px">✏️</button>
+      </div>`;
+    }).join('');
+    const COMPLEX_FAMILY=new Set([0,1,14,15,16,17,31,32,33]);
+    let familyPos=null, familyTotal=0;
+    if(COMPLEX_FAMILY.has(o.type)){
+      familyTotal = p.ob.objs.filter(x=>COMPLEX_FAMILY.has(x.type)).length;
+      familyPos = p.ob.objs.filter(x=>COMPLEX_FAMILY.has(x.type)).indexOf(o)+1;
+    }
+    const info=getObNotes()[o.type];
+    box.innerHTML=`
+      <div class="field-row"><label>${T('Type','Тип')}</label><span>${typeLabel(o.type)}${o.isSpawn?T(' (JACK START, type=9)',' (СТАРТ ДЖЕКА, type=9)'):''}${o.isFirst?T(' [object #0, cannot be deleted]',' [объект #0, нельзя удалить]'):''}</span>
+        <button id="renameType" title="${T('Assign a name to type','Присвоить название типу')} ${o.type}" style="padding:1px 6px">✏️</button></div>
+      ${info?`<div class="hint">ℹ ${info.note}</div>`:''}
+      <div class="field-row"><label>${T('Position in list','Позиция в списке')}</label><span>${i+1} ${T('of','из')} ${p.ob.objs.length}</span></div>
+      ${familyPos?`<div class="field-row"><label>${T('Position in the swing/hammer \'family\'','Позиция в "семье" качелей/молотков')}</label><span>${familyPos} ${T('of','из')} ${familyTotal}</span></div>`:''}
+      <div class="field-row"><label>X</label><input type="number" id="selX" value="${o.x}"></div>
+      <div class="field-row"><label>Y</label><input type="number" id="selY" value="${o.y}"></div>
+      <div class="mono-small" style="margin:6px 0 2px">${T('Extra fields (numbered from the 4th word of the record — 1=type,2=x,3=y). Names with ✏️ are yours, saved in the browser for all objects of this type:','Доп. поля (нумерация с 4-го слова записи — 1=type,2=x,3=y). Названия с ✏️ — твои, сохраняются в браузере для всех объектов этого типа:')}</div>
+      ${tailFields}
+      <div class="field-row" style="margin-top:8px">
+      </div>
+      ${o.isFirst?'':'<button id="selDelete" class="danger" style="margin-top:8px">🗑 '+T('Delete object','Удалить объект')+'</button>'}
+    `;
+    document.getElementById('renameType').onclick=()=>{
+      const cur=userNames.types[o.type]||'';
+      const val=prompt(T('Name for type ','Название для типа ')+o.type+T(' (empty — remove):',' (пусто — убрать):'), cur);
+      if(val===null) return;
+      if(val.trim()==='') delete userNames.types[o.type]; else userNames.types[o.type]=val.trim();
+      saveUserNames(); buildObjPalette(); renderSelInfo(); renderLevel();
+    };
+    box.querySelectorAll('.fieldRename').forEach(btn=>{
+      btn.onclick=()=>{
+        const rawIdx=parseInt(btn.dataset.idx);
+        const cur=(userNames.fields[o.type]&&userNames.fields[o.type][rawIdx])||'';
+        const val=prompt(T('Name for field ','Название для поля ')+(rawIdx+1)+T(' of type ',' у типа ')+o.type+T(' (empty — remove):',' (пусто — убрать):'), cur);
+        if(val===null) return;
+        if(!userNames.fields[o.type]) userNames.fields[o.type]={};
+        if(val.trim()==='') delete userNames.fields[o.type][rawIdx]; else userNames.fields[o.type][rawIdx]=val.trim();
+        saveUserNames(); renderSelInfo();
+      };
+    });
+    document.getElementById('selX').onchange=e2=>{o.x=parseInt(e2.target.value)||0;o.raw[1]=o.x;markDirty('OB');renderLevel();};
+    document.getElementById('selY').onchange=e2=>{o.y=parseInt(e2.target.value)||0;o.raw[2]=o.y;markDirty('OB');renderLevel();};
+    box.querySelectorAll('.rawfield').forEach(inp=>{
+      inp.onchange=e2=>{
+        const idx=parseInt(e2.target.dataset.idx);
+        o.raw[idx]=parseInt(e2.target.value)||0;
+        markDirty('OB');
+      };
+    });
+    if(!o.isFirst) document.getElementById('selDelete').onclick=()=>deleteObject(i);
+  }
+}
+
+function deleteBrick(i){
+  const p=state.parsed;
+  p.wam.ents.splice(i,1); p.I.splice(i,1);
+  if(p.col&&p.col.length) p.col.splice(i+1,1);
+  state.sel=null;
+  markDirty('WAM','I','COL');
+  renderLevel();
+}
+
+// Places a brick using the current brush. state.brushBlock is either a
+// plain number (a block already in this level's own .G2) or an object
+// {srcKey, srcIdx} referring to a tile shown from another loaded level's
+// theme palette. Foreign tiles are only actually copied into this level's
+// .G2/.G2R the first time they're placed (lazy import) — pick the palette
+// item, place it once, and only that one tile ends up in the export; the
+// rest of the source level's tileset is never touched.
+function placeBrickAt(m){
+  const p=state.parsed;
+  const nx=Math.round(m.x/8)*8, ny=Math.round(m.y/8)*8;
+  let blockIdx, defType, defCol;
+
+  if(typeof state.brushBlock==='number'){
+    blockIdx=state.brushBlock;
+    defType=p.blockDefaultType.get(blockIdx);
+    defCol=p.blockDefaultCol.get(blockIdx);
+  }else{
+    const {srcKey,srcIdx}=state.brushBlock;
+    const src=themeSources[srcKey];
+    if(!src){document.getElementById('err').textContent=T('Source ','Источник ')+srcKey+T(' is no longer loaded.',' больше не загружен.');return;}
+    const importKey=srcKey+'#'+srcIdx;
+    if(p.importMap.has(importKey)){
+      blockIdx=p.importMap.get(importKey);
+    }else{
+      // NOTE (reverted from nearest-color remap): rewriting a foreign block's
+      // pixel index values to the closest color in this level's own palette
+      // was tried here and looked byte-correct offline, but real in-game
+      // testing showed it reliably corrupts rendering ("crooked"/streaky") —
+      // for this tile AND visually nearby ones — regardless of which tile,
+      // its size, or whether just this one tile or the whole level's
+      // palette was remapped. A RAW, completely unmodified copy of the
+      // block's ORIGINAL native pixel indices, by contrast, has reliably
+      // rendered correctly (right shape, off/wrong colors) in every test.
+      // So: copy the pixel data through untouched. Colors will look "off"
+      // under this level's palette — that's a real cosmetic cost, but it's
+      // the only variant that hasn't corrupted rendering in testing so far.
+      const raw={rows:src.blocks[srcIdx].rows.map(r=>({skip:r.skip, px:Uint8Array.from(r.px)})),
+                 w:src.blocks[srcIdx].w, h:src.blocks[srcIdx].h};
+      blockIdx=p.blocks.length;
+      p.blocks.push(raw);
+      p.g2r.push(src.g2r[srcIdx]!=null ? src.g2r[srcIdx] : 2);
+      p.importMap.set(importKey, blockIdx);
+      markDirty('G2','G2R');
+    }
+    defType=src.blockDefaultType.get(srcIdx);
+    defCol=src.blockDefaultCol.get(srcIdx);
+  }
+
+  const brickType = defType!=null ? defType : 1;
+  p.wam.ents.push({type:brickType,x:nx,y:ny});
+  p.I.push({block:blockIdx,flip:0});
+  if(p.col) p.col.push(defCol ? [defCol[0], defCol[1], 0] : [0,0,0]);
+  resortBricks();
+  state.sel={kind:'brick',idx:p.wam.ents.findIndex(e=>e.x===nx&&e.y===ny)};
+  markDirty('WAM','I','COL');
+  renderLevel();
+  const placedBlock=p.blocks[blockIdx];
+  const wasForeign = typeof state.brushBlock!=='number';
+  if(defType==null){
+    document.getElementById('err').textContent=T('⚠ This block has no placement anywhere yet — the correct "type" is unknown, set to 1 as a guess. Check and fix it manually in the panel on the right before saving!','⚠ Для этого блока ещё нет ни одного размещения нигде — не знаю правильный "type", поставил 1 наугад. Проверь и поправь вручную в панели справа перед сохранением!');
+  }else if(wasForeign){
+    document.getElementById('err').textContent=T('ℹ The brick was imported from another level of the theme as-is, without recoloring for this level\'s palette — the color may look slightly different than in the preview, but this keeps the in-game render correct (recoloring pixels to a foreign palette breaks rendering in practice — verified).','ℹ Кирпич импортирован из другого уровня темы как есть, без перекраски под палитру этого уровня — цвет может выглядеть немного не так, как на превью, но так рендер в игре остаётся корректным (перекраска пикселей под чужую палитру на практике ломает отрисовку — проверено).');
+  }else{
+    document.getElementById('err').textContent='';
+  }
+}
+// on every original level file) — the renderer/collision sweep almost
+// certainly relies on this order. Any add or Y-move must re-sort WAM+I+COL
+// together (they're parallel arrays, COL[0] is a header so COL[i+1] belongs
+// to WAM entry i) or the game misreads neighboring records: this is what
+// caused the "half-cut crate with doubled collision" and the crash on the
+// new TV — the appended entry broke the required ordering.
+function resortBricks(){
+  const p=state.parsed; if(!p)return;
+  const n=p.wam.ents.length;
+  const idx=[...Array(n).keys()];
+  // stable sort by Y so ties keep their relative order (matches original data)
+  idx.sort((a,b)=>p.wam.ents[a].y-p.wam.ents[b].y);
+  const alreadySorted = idx.every((v,i)=>v===i);
+  if(alreadySorted)return;
+  const newEnts=idx.map(i=>p.wam.ents[i]);
+  const newI=idx.map(i=>p.I[i]);
+  const newCol = p.col&&p.col.length ? [p.col[0], ...idx.map(i=>p.col[i+1])] : p.col;
+  // keep selection pointing at the same logical brick after reordering
+  let newSelIdx=null;
+  if(state.sel&&state.sel.kind==='brick') newSelIdx=idx.indexOf(state.sel.idx);
+  p.wam.ents=newEnts; p.I=newI; if(newCol) p.col=newCol;
+  if(newSelIdx!==null) state.sel.idx=newSelIdx;
+  markDirty('WAM','I','COL');
+}
+// Swaps an object's position with its neighbor in the underlying .OB list.
+// Discovered that some object families (swings etc.) get their in-game
+// material/variant assigned by POSITION IN THE LIST rather than by their
+// own stored fields (confirmed: two type=0 objects with byte-identical
+// data rendered as wood vs metal purely based on list order) — this lets
+// you test/control that by moving a new object earlier or later in order.
+// Object #0 never moves (structurally fixed as the excluded-from-count slot).
+function moveObjectOrder(i, dir){
+  const p=state.parsed;
+  const j=i+dir;
+  if(j<1 || j>=p.ob.objs.length || i<1) return; // never touch slot #0
+  [p.ob.objs[i], p.ob.objs[j]] = [p.ob.objs[j], p.ob.objs[i]];
+  state.sel={kind:'object', idx:j};
+  markDirty('OB');
+  renderLevel();
+}
+
+function deleteObject(i){
+  const p=state.parsed;
+  const o=p.ob.objs[i];
+  if(o.isFirst)return; // object #0 is structurally required (the .OB count field always excludes it)
+  if(o.isSpawn){
+    if(!confirm(T('This is Jack\'s start point (type=9)! Without it the level will probably fail to load at all — it crashes regardless of other objects. Really delete it?','Это точка старта Джека (type=9)! Без неё уровень, вероятно, не загрузится вообще — крашится независимо от других объектов. Точно удалить?'))) return;
+  }
+  p.ob.objs.splice(i,1);
+  state.sel=null;
+  markDirty('OB');
+  renderLevel();
+}
+
+// interactions
+function screenToMap(e){
+  const rect=vp.getBoundingClientRect();
+  return {
+    x:(e.clientX-rect.left-state.px)/state.zoom-MARGIN,
+    y:(e.clientY-rect.top-state.py)/state.zoom-MARGIN
+  };
+}
+
+vp.addEventListener('mousedown',e=>{
+  try{
+  if(e.target.id==='btnOpen2')return;
+  const p=state.parsed;
+  const m=screenToMap(e);
+  if(state.mode==='edit'&&p){
+    // Clicking an existing brick/object always selects+drags it, even while
+    // a placement brush is active — only clicking empty space places a new
+    // one. This matches how tile editors usually behave and avoids
+    // accidentally stacking duplicates on top of what's already there.
+    for(let i=objhit.length-1;i>=0;i--){
+      const h=objhit[i]; const dx=m.x-h.x, dy=m.y-h.y;
+      if(dx*dx+dy*dy<=h.r*h.r){
+        state.sel={kind:'object',idx:h.idx};
+        state.drag={kind:'object',idx:h.idx,startMouse:m,startX:p.ob.objs[h.idx].x,startY:p.ob.objs[h.idx].y};
+        renderLevel();
+        return;
+      }
+    }
+    for(let i=hitmap.length-1;i>=0;i--){
+      const h=hitmap[i];
+      if(m.x>=h.x&&m.x<h.x+h.w&&m.y>=h.y&&m.y<h.y+h.h){
+        state.sel={kind:'brick',idx:h.idx};
+        state.drag={kind:'brick',idx:h.idx,startMouse:m,startX:p.wam.ents[h.idx].x,startY:p.wam.ents[h.idx].y};
+        renderLevel();
+        return;
+      }
+    }
+    // nothing existing under the cursor — place a new one if a brush is active
+    if(state.tool==='placeBrick'&&state.brushBlock!=null){
+      placeBrickAt(m);
+      return;
+    }
+    if(state.tool==='placeObject'&&state.brushObjType!=null&&OB_PLACE_LEN[state.brushObjType]){
+      const L=OB_PLACE_LEN[state.brushObjType];
+      // Tried cloning params from an existing same-type object as the
+      // default (instead of the statistically-common tail below) hoping to
+      // fix mis-positioned swings — testing showed it's WORSE: one of the
+      // fields is likely a unique per-instance slot/ID, and duplicating it
+      // from an existing object made the new one invisible entirely. Always
+      // use the statistical default (or zero-fill if none) instead.
+      const defaultTail = OB_DEFAULT_TAIL[state.brushObjType];
+      let raw = defaultTail ? [state.brushObjType,0,0,...defaultTail]
+        : new Array(L).fill(0);
+      // Hard safety net: the record MUST be exactly L words, no matter what
+      // OB_DEFAULT_TAIL says. This is what silently broke type 1 before —
+      // its stored default tail was sized for an old, since-corrected
+      // length model (20 values for a record that's actually only ever 7
+      // words total), so every placed type-1 object was overrunning into
+      // and corrupting the NEXT object's bytes. Truncate/pad defensively so
+      // a stale or wrong table entry can never do that again — it'll just
+      // look visibly wrong (extra zeros or a truncated tail) instead of
+      // silently corrupting the rest of the file.
+      if(raw.length!==L){
+        console.warn('OB_DEFAULT_TAIL length mismatch for type', state.brushObjType, ': expected', L, 'got', raw.length, '— truncating/padding defensively.');
+        raw = raw.slice(0,L);
+        while(raw.length<L) raw.push(0);
+      }
+      raw[0]=state.brushObjType; raw[1]=Math.round(m.x); raw[2]=Math.round(m.y);
+      p.ob.objs.push({type:state.brushObjType,x:raw[1],y:raw[2],raw,isFirst:false,isSpawn:state.brushObjType===9});
+      state.sel={kind:'object',idx:p.ob.objs.length-1};
+      markDirty('OB');
+      renderLevel();
+      document.getElementById('err').textContent = defaultTail
+          ? (OB_SUSPECT_DEFAULT.has(state.brushObjType)
+              ? T(`⚠ Extra parameters were taken from the most common real-world example, BUT in real levels the tail for this type varies (this isn't the only variant) — check the panel on the right before saving.`,`⚠ Доп. параметры взяты из самого частого реального примера, НО в реальных уровнях у этого типа хвост варьируется (это не единственный вариант) — проверь панель справа перед сохранением.`)
+              : T(`Extra parameters were taken from the most common real example of this type across all levels of the game (identical in all ${147} levels for this type).`,`Доп. параметры взяты из самого частого реального примера этого типа по всем уровням игры (одинаковы во всех ${147} уровнях для этого типа).`))
+          : T('⚠ No data about typical parameters for this type — set to zeros. It may not work.','⚠ Нет данных о типичных параметрах этого типа — выставлены нули. Может не заработать.');
+      return;
+    }
+    state.sel=null; renderLevel();
+  }
+  state.panDrag={x:e.clientX,y:e.clientY,px:state.px,py:state.py};
+  vp.classList.add('drag');
+  }catch(err){
+    console.error(err);
+    document.getElementById('err').textContent=T('Error: ','Ошибка: ')+err.message;
+  }
+});
+window.addEventListener('mouseup',()=>{
+  if(state.drag&&state.drag.kind==='brick'){
+    resortBricks();
+    renderLevel();
+  }
+  state.panDrag=null; state.drag=null;
+  vp.classList.remove('drag');
+});
+window.addEventListener('mousemove',e=>{
+  const p=state.parsed;
+  if(state.drag&&p){
+    const m=screenToMap(e);
+    const dx=Math.round((m.x-state.drag.startMouse.x)/8)*8;
+    const dy=Math.round((m.y-state.drag.startMouse.y)/8)*8;
+    if(state.drag.kind==='brick'){
+      const ent=p.wam.ents[state.drag.idx];
+      ent.x=state.drag.startX+dx; ent.y=state.drag.startY+dy;
+      markDirty('WAM');
+    }else{
+      const o=p.ob.objs[state.drag.idx];
+      o.x=state.drag.startX+Math.round(m.x-state.drag.startMouse.x);
+      o.y=state.drag.startY+Math.round(m.y-state.drag.startMouse.y);
+      o.raw[1]=o.x; o.raw[2]=o.y;
+      markDirty('OB');
+    }
+    renderLevel();
+    return;
+  }
+  if(state.panDrag){state.px=state.panDrag.px+e.clientX-state.panDrag.x;state.py=state.panDrag.py+e.clientY-state.panDrag.y;applyTransform();return;}
+  if(!state.parsed)return;
+  const m=screenToMap(e);
+  if(e.target.closest('#viewport')){
+    document.getElementById('stCur').textContent=Math.round(m.x)+','+Math.round(m.y);
+    if(state.mode!=='edit'){
+      let found=null;
+      for(let i=hitmap.length-1;i>=0;i--){const h=hitmap[i];
+        if(m.x>=h.x&&m.x<h.x+h.w&&m.y>=h.y&&m.y<h.y+h.h){found=h;break;}}
+      showBrick(found);
+    }
+  }
+});
+vp.addEventListener('wheel',e=>{
+  if(!state.parsed)return;
+  e.preventDefault();
+  const rect=vp.getBoundingClientRect();
+  const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  const wx=(mx-state.px)/state.zoom, wy=(my-state.py)/state.zoom;
+  let z=Math.min(8,Math.max(.05,state.zoom*(e.deltaY<0?1.15:1/1.15)));
+  const nearest=Math.round(z);
+  if(nearest>=1 && Math.abs(z-nearest)<0.04) z=nearest; // snap close to whole-number zoom to avoid fractional-scale pixel wobble
+  state.zoom=z;
+  state.px=mx-wx*state.zoom; state.py=my-wy*state.zoom;
+  applyTransform();
+},{passive:false});
+
+window.addEventListener('keydown',e=>{
+  if(state.mode!=='edit')return;
+  if(e.key==='Escape'){
+    state.tool='select'; state.brushBlock=null; state.brushObjType=null;
+    document.querySelectorAll('.pitem.sel,.otype.sel').forEach(x=>x.classList.remove('sel'));
+    updateToolUI();
+  }
+  if((e.key==='Delete'||e.key==='Backspace')&&state.sel&&document.activeElement.tagName!=='INPUT'){
+    e.preventDefault();
+    if(state.sel.kind==='brick')deleteBrick(state.sel.idx);
+    else deleteObject(state.sel.idx);
+  }
+});
+
+let lastShown=-1;
+function showBrick(h){
+  const box=document.getElementById('brickinfo');
+  const bc=document.getElementById('brickcanvas');
+  if(!h){if(lastShown!==-1){box.innerHTML='<div class="hint">'+T('Hover the cursor over a brick on the map.','Наведи курсор на кирпич на карте.')+'</div>';bc.getContext('2d').clearRect(0,0,bc.width,bc.height);lastShown=-1;}return;}
+  if(h.idx===lastShown)return;lastShown=h.idx;
+  const p=state.parsed;
+  const e=p.wam.ents[h.idx],ie=p.I[h.idx],c=p.col[h.idx+1]||null;
+  box.innerHTML=
+    `<div class="kv"><span>${T('record #','№ записи')}</span><span>${h.idx}</span></div>`+
+    `<div class="kv"><span>${T('block .G2','блок .G2')}</span><span>#${ie.block}${ie.flip?' (flip=1)':''}</span></div>`+
+    `<div class="kv"><span>${T('position','позиция')}</span><span>${e.x}, ${e.y}</span></div>`+
+    `<div class="kv"><span>${T('size','размер')}</span><span>${h.w}×${h.h}</span></div>`+
+    (c?`<div class="kv"><span>.COL ${T('record','запись')}</span><span>${c.join(' / ')}</span></div>`:'')+
+    `<div class="kv"><span>routine</span><span>${p.g2r[ie.block]}</span></div>`;
+  const b=p.blocks[ie.block];
+  const ctx=bc.getContext('2d');ctx.imageSmoothingEnabled=false;
+  ctx.clearRect(0,0,bc.width,bc.height);
+  const t=document.createElement('canvas');t.width=b.w;t.height=b.h;
+  drawBrick(t.getContext('2d'),b,p.pal,0,0,state.flip&&ie.flip===1,state.trans);
+  const s=Math.min(bc.width/b.w,bc.height/b.h);
+  ctx.drawImage(t,0,0,b.w,b.h,(bc.width-b.w*s)/2,(bc.height-b.h*s)/2,b.w*s,b.h*s);
+}
+
+// toolbar
+document.getElementById('lvlsel').onchange=loadSelectedLevel;
+function toggle(btn,key){document.getElementById(btn).onclick=e=>{state[key]=!state[key];e.target.classList.toggle('on',state[key]);renderLevel();};}
+toggle('btnGrid','grid');toggle('btnObj','obj');toggle('btnCol','col');toggle('btnFlip','flip');toggle('btnTrans','trans');
+document.getElementById('zoomIn').onclick=()=>{state.zoom=Math.min(8,state.zoom*1.25);applyTransform();};
+document.getElementById('zoomOut').onclick=()=>{state.zoom=Math.max(.05,state.zoom/1.25);applyTransform();};
+document.getElementById('zoomFit').onclick=zoomFit;
+document.getElementById('zoom100').onclick=()=>{
+  // Exact 1:1 pixel scale — fractional zoom (what "Вписать" usually lands
+  // on) makes nearest-neighbor scaling duplicate some pixel rows/columns
+  // unevenly, which reads as "shifted/jagged" sprite edges even though the
+  // underlying decoded data is correct. 100% avoids that entirely.
+  const cx=vp.clientWidth/2, cy=vp.clientHeight/2;
+  const wx=(cx-state.px)/state.zoom, wy=(cy-state.py)/state.zoom;
+  state.zoom=1;
+  state.px=cx-wx; state.py=cy-wy;
+  applyTransform();
+};
+
+document.getElementById('modeView').onclick=()=>{
+  state.mode='view'; state.tool='select'; state.sel=null;
+  document.getElementById('modeView').classList.add('on');
+  document.getElementById('modeEdit').classList.remove('on');
+  document.getElementById('editTools').style.display='none';
+  document.getElementById('editorPanel').style.display='none';
+  document.getElementById('viewerPanel').style.display='block';
+  updateToolUI();
+  renderLevel();
+};
+document.getElementById('modeEdit').onclick=()=>{
+  state.mode='edit'; state.tool='select';
+  document.getElementById('modeEdit').classList.add('on');
+  document.getElementById('modeView').classList.remove('on');
+  document.getElementById('editTools').style.display='flex';
+  document.getElementById('editorPanel').style.display='block';
+  document.getElementById('viewerPanel').style.display='none';
+  updateToolUI();
+  renderLevel();
+};
+document.getElementById('toolSelect').onclick=()=>{
+  state.tool='select'; state.brushBlock=null; state.brushObjType=null;
+  document.querySelectorAll('.pitem.sel,.otype.sel').forEach(x=>x.classList.remove('sel'));
+  updateToolUI();
+};
+document.getElementById('toolDelete').onclick=()=>{
+  if(!state.sel)return;
+  if(state.sel.kind==='brick')deleteBrick(state.sel.idx);
+  else deleteObject(state.sel.idx);
+};
+
+document.getElementById('tabMap').onclick=()=>{
+  state.tab='map';
+  document.getElementById('tabMap').classList.add('active');
+  document.getElementById('tabSprites').classList.remove('active');
+  document.getElementById('tabBg').classList.remove('active');
+  vp.style.display='block';
+  document.getElementById('spritepane').classList.remove('show');
+  document.getElementById('bgpane').classList.remove('show');
+};
+document.getElementById('tabSprites').onclick=()=>{
+  state.tab='sprites';
+  document.getElementById('tabSprites').classList.add('active');
+  document.getElementById('tabMap').classList.remove('active');
+  document.getElementById('tabBg').classList.remove('active');
+  vp.style.display='none';
+  document.getElementById('spritepane').classList.add('show');
+  document.getElementById('bgpane').classList.remove('show');
+  renderSpritePane();
+};
+document.getElementById('tabBg').onclick=()=>{
+  state.tab='bg';
+  document.getElementById('tabBg').classList.add('active');
+  document.getElementById('tabMap').classList.remove('active');
+  document.getElementById('tabSprites').classList.remove('active');
+  vp.style.display='none';
+  document.getElementById('spritepane').classList.remove('show');
+  document.getElementById('bgpane').classList.add('show');
+  renderBgPane();
+};
+
+const themeBtn=document.getElementById('btnTheme');
+function setTheme(t){
+  document.documentElement.setAttribute('data-theme', t);
+  themeBtn.textContent = t==='light' ? T('☀ Light','☀ Светлая') : T('☾ Dark','☾ Тёмная');
+  try{localStorage.setItem('trashit-theme', t);}catch(e){}
+}
+themeBtn.onclick=()=>{
+  const cur=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';
+  setTheme(cur==='light'?'dark':'light');
+};
+(function initTheme(){
+  let t='dark';
+  try{t=localStorage.getItem('trashit-theme')||'dark';}catch(e){}
+  setTheme(t);
+})();
+
+function downloadBlob(bytes,filename){
+  const blob=new Blob([bytes],{type:'application/octet-stream'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+// On export, keep every block that came from this level's own original .G2
+// (index < originalBlockCount) no matter what — other systems we haven't
+// fully mapped (G2R/OBT/SDE) might reference them in ways we can't see.
+// Blocks appended via lazy theme-tile placement (index >= originalBlockCount)
+// are only kept if something in .I actually references them — so exporting
+// after placing just one foreign tile doesn't drag in a whole other level's
+// tileset. Kept blocks are renumbered contiguously and .I is remapped to match.
+function computeTrimmedG2(p){
+  const used=new Set(p.I.map(ie=>ie.block));
+  const keep=[];
+  for(let i=0;i<p.blocks.length;i++){
+    if(i<p.originalBlockCount || used.has(i)) keep.push(i);
+  }
+  const indexMap=new Map(keep.map((oldIdx,newIdx)=>[oldIdx,newIdx]));
+  const blocks=keep.map(i=>p.blocks[i]);
+  const g2r=keep.map(i=>p.g2r[i]!=null?p.g2r[i]:2);
+  return {blocks,g2r,indexMap};
+}
+const FILE_BUILDERS={
+  WAM:p=>buildWam(p.wam),
+  I:p=>{
+    const {indexMap}=computeTrimmedG2(p);
+    const remapped=p.I.map(ie=>({block:indexMap.get(ie.block), flip:ie.flip}));
+    return buildI(remapped);
+  },
+  OB:p=>buildOb(p.ob),
+  COL:p=>buildCol(p.col),
+  G2:p=>buildG2(computeTrimmedG2(p).blocks),
+  G2R:p=>Uint8Array.from(computeTrimmedG2(p).g2r),
+  PAL:p=>buildPal(p.pal),
+  SCN:p=>buildScn(p.scn),
+  SPR:p=>p.sprRaw,
+};
+function updateExportUI(){
+  const p=state.parsed;
+  const recolored = ensureExportPaletteConsistency(p, state.key);
+  const hint=document.getElementById('exportHint');
+  const box=document.getElementById('exportButtons');
+  if(!box)return;
+  box.innerHTML='';
+  const dirtyKeys=Object.keys(state.dirty).filter(k=>state.dirty[k]);
+  if(dirtyKeys.length===0){
+    hint.innerHTML=T('No changes yet — nothing to export.','Изменений пока нет — экспортировать нечего.');
+    return;
+  }
+  const allExts=['G2','G2R','I','WAM','COL','OB','PAL','SCN','SPR'];
+  const untouched=allExts.filter(e=>!dirtyKeys.includes(e));
+  hint.innerHTML =
+    `<b style="color:var(--bad)">${T('Changed:','Изменено:')} ${dirtyKeys.join(', ')}.</b><br>`+
+    (dirtyKeys.length>1
+      ? T(`⚠ These are ${dirtyKeys.length} files, and they are interconnected (e.g. .G2 and .G2R must match in block count) — <b>replace ALL ${dirtyKeys.length} of them in the game AT ONCE</b>. Replacing only part of them will most likely break the level or cause a "corrupted" render, like a .G2/.G2R desync.`,`⚠ Это ${dirtyKeys.length} файла, и они взаимосвязаны (например .G2 и .G2R должны совпадать по количеству блоков) — <b>замени в игре ВСЕ ${dirtyKeys.length} сразу, одним разом</b>. Если заменить только часть — уровень скорее всего сломается или будет "битый" рендер, как при рассинхроне .G2/.G2R.`)
+      : T(`It's a single file — just replace it in the level folder.`,`Файл один — просто замени его в папке уровня.`))+
+    (untouched.length ? T(`<br>The rest (${untouched.join(', ')}) were not changed — take them from the original level folder as-is.`,`<br>Остальные (${untouched.join(', ')}) не менялись — бери их из исходной папки уровня как есть.`) : '');
+  for(const key of dirtyKeys){
+    const btn=document.createElement('button');
+    btn.textContent=`⬇ ${T('Download','Скачать')} .${key} (${T('changed','изменён')})`;
+    btn.onclick=()=>{
+      const p=state.parsed; if(!p)return;
+      downloadBlob(FILE_BUILDERS[key](p), levelDisplay[state.key]+'.'+key);
+    };
+    box.appendChild(btn);
+  }
+  const btnAll=document.createElement('button');
+  btnAll.className='primary';
+  btnAll.textContent='⬇ '+T('Download ALL changes at once (','Скачать ВСЁ изменённое разом (')+dirtyKeys.length+T(' file'+(dirtyKeys.length>1?'s':'')+')',' файл'+(dirtyKeys.length>1?'а':'')+')');
+  btnAll.onclick=()=>{
+    const p=state.parsed; if(!p)return;
+    dirtyKeys.forEach((key,idx)=>{
+      setTimeout(()=>downloadBlob(FILE_BUILDERS[key](p), levelDisplay[state.key]+'.'+key), idx*250);
+    });
+  };
+  box.appendChild(btnAll);
+  if(dirtyKeys.length>1){
+    const warn=document.createElement('div');
+    warn.className='hint';
+    warn.style.color='var(--bad)';
+    warn.style.marginTop='4px';
+    warn.textContent=T('Use the "Download ALL" button above instead of individual files one by one — that way you won\'t forget any of the related files.','Используй кнопку "Скачать ВСЁ" выше, а не отдельные файлы по одному — так не забудешь ни один из связанных файлов.');
+    box.appendChild(warn);
+  }
+}
+
+document.getElementById('btnOpen').onclick=()=>fileInput.click();
+document.getElementById('btnOpen2').onclick=()=>fileInput.click();
+fileInput.onchange=()=>ingestFiles(fileInput.files);
+
+const drop=document.getElementById('drop');
+['dragenter','dragover'].forEach(ev=>vp.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(ev=>vp.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over');}));
+vp.addEventListener('drop',async e=>{
+  e.preventDefault();
+  const items=e.dataTransfer.items;
+  let files=[];
+  if(items && items.length && items[0].webkitGetAsEntry){
+    async function walk(entry){
+      if(entry.isFile){
+        const f=await new Promise(res=>entry.file(res));
+        files.push(f);
+      }else if(entry.isDirectory){
+        const reader=entry.createReader();
+        const entries=await new Promise(res=>reader.readEntries(res));
+        for(const en of entries) await walk(en);
+      }
+    }
+    const entries=[...items].map(it=>it.webkitGetAsEntry()).filter(Boolean);
+    for(const en of entries) await walk(en);
+  }else{
+    files=[...e.dataTransfer.files];
+  }
+  if(files.length) ingestFiles(files);
+});
+
+
+updateToolUI();
+
+// ================= i18n (EN default / RU) =================
+const I18N_RU = {
+  'hdr.formats': 'форматы расшифрованы из G.EXE (DOS4GW LE) — редактирование + экспорт в бинарники игры',
+  'hdr.credits': 'Редактор и дебаггинг: <b>DarkSoL</b> (Discord: darksol41), при поддержке ИИ Claude',
+  'tb.open': '📂 Открыть файлы уровня…',
+  'tb.level': 'Уровень',
+  'tb.noData': '— нет данных —',
+  'tb.view': '👁 Просмотр',
+  'tb.edit': '✏ Редактор',
+  'tb.selectMove': 'Выбрать/двигать',
+  'tb.delete': 'Удалить (Del)',
+  'tb.grid': 'Сетка 48px',
+  'tb.objects': 'Объекты (.OB)',
+  'tb.durability': 'Прочность (.COL)',
+  'tb.flip': 'Зеркалить flip=1 (эксперим.)',
+  'tb.trans': '0=прозрачный',
+  'tb.fit': 'Показать весь уровень',
+  'tb.zoom100': '1:1 (чётко)',
+  'tb.themeDark': '☾ Тёмная',
+  'tabs.map': 'Карта',
+  'tabs.sprites': 'Спрайты (.SPR)',
+  'tabs.bg': 'Фон (.SCN)',
+  'drop.title': 'Открой файлы уровня',
+  'drop.p1': 'Выбери файлы одного уровня из папок <code>LEVELS</code> и <code>SPR</code> (нужны минимум: <code>XX.G2</code>, <code>XX.G2R</code>, <code>XX.I</code>, <code>XX.WAM</code>, <code>XX.PAL</code>; желательно ещё <code>XX.COL</code>, <code>XX.OB</code>, <code>XX.SPR</code>) — можно выделить сразу все файлы всех уровней, редактор сам сгруппирует их по имени.',
+  'drop.p2': 'Либо перетащи файлы/папку сюда мышью.',
+  'drop.choose': '📂 Выбрать файлы',
+  'side.map': 'Карта',
+  'side.noLevel': 'Уровень не загружен.',
+  'side.bricks': 'Кирпичи (палитра .G2)',
+  'side.objTypes': 'Объекты (тип .OB)',
+  'side.selected': 'Выбрано',
+  'side.selectedHint': 'Кликни по кирпичу/объекту на карте, или по палитре выше чтобы начать ставить новые.',
+  'side.themePalette': 'Палитра темы',
+  'side.export': 'Экспорт',
+  'side.noChanges': 'Изменений пока нет — экспортировать нечего.',
+  'side.brickUnderCursor': 'Кирпич под курсором',
+  'side.hoverHint': 'Наведи курсор на кирпич на карте.',
+  'side.levelFiles': 'Файлы уровня',
+  'footer.level': 'уровень:',
+  'footer.bricks': 'кирпичей:',
+  'footer.blocks': 'блоков в .G2:',
+  'footer.objs': 'объектов .OB:',
+  'footer.cursor': 'курсор:',
+};
+
+let I18N_EN = {};
+function captureEnglishOriginals(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const key = el.dataset.i18n;
+    if(!(key in I18N_EN)) I18N_EN[key] = el.innerHTML;
+  });
+}
+function applyStaticI18n(){
+  const dict = LANG==='ru' ? I18N_RU : I18N_EN;
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const key = el.dataset.i18n;
+    if(dict[key]!==undefined) el.innerHTML = dict[key];
+  });
+  document.documentElement.lang = LANG;
+  const be=document.getElementById('langEn'), br=document.getElementById('langRu');
+  if(be) be.classList.toggle('on', LANG==='en');
+  if(br) br.classList.toggle('on', LANG==='ru');
+}
+function setLang(l){
+  LANG = l;
+  try{ localStorage.setItem(LANG_KEY, l); }catch(e){}
+  applyStaticI18n();
+  try{ buildObjPalette(); }catch(e){}
+  try{ renderSelInfo(); }catch(e){}
+  try{ renderLevel(); }catch(e){}
+  try{ renderSpritePane(); }catch(e){}
+  try{ renderBgPane(); }catch(e){}
+  try{ updateExportUI(); }catch(e){}
+}
+captureEnglishOriginals();
+applyStaticI18n();
+const _langEnBtn=document.getElementById('langEn'), _langRuBtn=document.getElementById('langRu');
+if(_langEnBtn) _langEnBtn.onclick=()=>setLang('en');
+if(_langRuBtn) _langRuBtn.onclick=()=>setLang('ru');
+
+</script>
+</body>
+</html>
