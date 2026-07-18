@@ -59,6 +59,8 @@ Editing is generally low-risk if you only change positions and confirmed fields;
 
 *Trash It* is the property of its original developers/publisher. This editor and its accompanying documentation are unofficial, fan-made tools created for preservation, modding, and learning purposes.
 
+<sup>If you’d like to support me financially, BTC address: bc1qp476rmcaapl6n6xjvg2la50cfw3kwvxe8sj0m5
+
 ---
 
 ## License / disclaimer
