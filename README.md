@@ -57,9 +57,11 @@ Editing is generally low-risk if you only change positions and confirmed fields;
 **DarkSoL** (Discord: `darksol41`) — reverse engineering, in-game testing, debugging, and direction of the whole project.
 **Claude** (Anthropic) — AI-assisted static analysis, format decoding, statistical verification, and editor implementation, working alongside DarkSoL throughout.
 
-*Trash It* is the property of its original developers/publisher. This editor and its accompanying documentation are unofficial, fan-made tools created for preservation, modding, and learning purposes.
+*Trash It* © 1997 Rage Software, published by GT Interactive. The game, its name, graphics and levels belong to their respective owners. This editor and its accompanying documentation are unofficial, free, non-commercial fan-made tools created for preservation, modding, and learning purposes.
 
-<sup>If you’d like to support me financially, BTC address: bc1qp476rmcaapl6n6xjvg2la50cfw3kwvxe8sj0m5
+**What is in this package.** The game itself and its files are **not** included: you need your own copy of *Trash It*, and all level data, sprites and palettes are read from it.
+
+If you are a rights holder and want something changed or removed, contact me on Discord (`darksol41`) and I will do it.
 
 ---
 
